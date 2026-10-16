@@ -436,6 +436,15 @@ ros2 launch autoware_launch e2e_simulator.launch.xml simulator_type:=carla \
 | 4   | `use_sumo:=true tls_manager:=sumo` | 36 matched。信号360の青は25.4秒以上続き(CARLAの青は10秒)、SUMOの周期で変わることを確認。今回は青の間に交差点に着いたので停止はなかった。目的地に到着                                                                                                                                     |
 | 5   | `traffic_light.force_green:=true`  | 信号360は常にGREEN。停止理由 `traffic-signal` は一度も出ず、交差点を4.3 m/sのまま通過して到着。終了時に36信号のfreezeを解除・12グループをreset                                                                                                                                           |
 
+- 追加確認(2026-10-16、利用者): 起動手順書2.4.1の起動コマンド例(`use_sumo:=true tls_manager:=sumo
+traffic_light.publish:=true sumo_warmup_time:=600`、`spawn_point:="334.74,263.00,0.30,0.0,0.0,90.0"`。
+  道路19の中央で、信号372の停止線の約46 m手前)で、EGOが信号に従って走行することをCARLAの画面で確認した。
+  確認4で残っていた「SUMOが管理する信号で止まる」場面も、実際の走行で確認できた。
+- 同じ起動コマンドでの注意(今回の実装とは関係しない): Autoを押した後、EGOがしばらく発進しないことがある
+  (再現した3回で23〜45秒、利用者の実行では60秒以上)。停止中にMPCの操舵指令が揺れ
+  (−0.001〜−0.038 rad)、「操舵が収束するまで発進しない」(`enable_keep_stopped_until_steer_convergence`、
+  収束判定 `mpc_converged_threshold_rps: 0.01`)が働くため。RVizには `velocity control (steering not converged)`
+  の停止線が出る。しばらく待てば発進する。
 - 確認4で分かったこと(既存のSUMO連携の仕様。今回の範囲外): 1つのCARLAの信号(landmark)に、
   SUMOの複数のリンクが対応していて状態が違う場合(例 `['G', 'y']`、`['G', 'r']`)は、CARLAは赤に
   なる(`BridgeHelper.get_carla_traffic_light_state()`)。このため、SUMOの黄の間や、右左折の
