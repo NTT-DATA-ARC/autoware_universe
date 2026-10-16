@@ -1,0 +1,172 @@
+# CARLA-Autoware: 信号状態の直接publish(Publishing CARLA Traffic-Light States) 実装計画 v1.0
+
+対象ブランチ: `feature/carla_traffic_light_publish`(`feature/sumo_co-sim` から分岐)
+
+参照仕様: Autoware公式ドキュメント
+<https://autowarefoundation.github.io/autoware_universe/main/simulator/autoware_carla_interface/>
+の「Publishing CARLA Traffic-Light States」
+
+---
+
+## 0. 目的・スコープ
+
+CARLAが管理している信号機の状態(赤・黄・青)を、カメラ画像による認識処理を介さずに、
+Autowareへ直接通知する。
+
+- 出力トピック: `/perception/traffic_light_recognition/traffic_signals`
+- 型: `autoware_perception_msgs/msg/TrafficLightGroupArray`
+- 周期: 毎tick
+- 信号の内容: 1つのCARLA信号を、形がCIRCLEの信号1つとして出す
+
+| CARLAの状態 | color | status |
+|---|---|---|
+| Red | RED | SOLID_ON |
+| Yellow | AMBER | SOLID_ON |
+| Green | GREEN | SOLID_ON |
+| Off | (UNKNOWN) | SOLID_OFF |
+| 上記以外(Unknown など) | UNKNOWN | UNKNOWN |
+
+### 0.1 パラメータ(公式ドキュメントに合わせる)
+
+| パラメータ | 既定値 | 内容 |
+|---|---|---|
+| `traffic_light.publish` | `False` | CARLAの信号状態をpublishする |
+| `traffic_light.force_green` | `False` | 起動時に全信号を緑にしてfreezeする |
+| `traffic_light.map_path` | `""` | 位置マッチングに使うLanelet2の `.osm` のパス |
+| `traffic_light.match_distance` | `5.0` | マッチを認める信号灯どうしの最大距離 [m] |
+| `traffic_light.match_ratio` | `0.6` | 曖昧と判定するしきい値(小さいほど厳しい) |
+| `traffic_light.id_map` | `""` | 手動での対応付け `opendrive_id:group_id[\|group_id...]`。マッチングより優先する |
+| `map_origin_x` / `map_origin_y` | `0.0` | CARLAの原点からAutowareの地図原点までのずれ。位置マッチングでも使う |
+
+### 0.2 グループIDの決め方(優先順)
+
+1. `traffic_light.id_map` に書かれていれば、それを使う。書式が不正なものは警告して読み飛ばす。
+2. `traffic_light.map_path` があれば、位置マッチングを行う。CARLAの各信号灯を地図上で一番近い
+   信号灯に対応付け、その信号灯を参照するすべてのregulatory elementのIDでpublishする。
+   次の場合は対応付けずにログへ出し、publishしない。
+   - 別の信号の信号灯がほぼ同じ距離にある(`match_ratio` で判定)
+   - 2つの信号灯がまったく同じ距離にある
+   - `match_distance` 以内に信号灯がない
+3. 上のどちらもない場合は、OpenDRIVEの信号IDをそのままグループIDとして使う。
+
+起動時のログに、マッチできた数・曖昧な数・遠すぎた数を出す。
+
+---
+
+## 1. 事前調査で分かったこと
+
+1. **ローカルのLanelet2地図に信号の情報が入っていない。**
+   `~/autoware_map/Town01`・`Town10HD` の `lanelet2_map.osm` には `lanelet`(subtype=road)
+   しかなく、信号のregulatory element・信号灯のlinestring・停止線がいずれも0件。
+   このままでは位置マッチングの照合先がなく、Autowareの計画側(traffic_lightモジュール)も
+   反応しない。公式ドキュメントのKnown Issuesにも同じことが書かれている。
+   → 地図に信号を追加するツール(T2)を作る。
+2. CARLA 0.9.15 の `carla.TrafficLight` に、必要なAPIがそろっている:
+   `get_opendrive_id()`、`get_light_boxes()`、`get_stop_waypoints()`、
+   `get_affected_lane_waypoints()`、`freeze()`、`state`。
+3. SUMO連携(`sumo_integration/carla_simulation.py`)に、landmark IDから信号actorを引く処理と、
+   freeze/解除の処理がすでにある。`tls_manager=sumo` のときはCARLAの信号がSUMOに合わせて
+   動くので、CARLAの状態をpublishすれば、SUMOが決めた信号状態もAutowareに届く。
+4. `autoware_launch`(別リポジトリ)の `e2e_simulator.launch.xml` に、コミットされていない
+   変更(Vissim用の引数など)がある。カメラ認識の停止は
+   `tier4_perception_component.launch.xml` の `use_traffic_light_recognition` で行える。
+
+---
+
+## 2. タスク一覧
+
+| # | タスク | 主な変更先 | 状態 |
+|---|---|---|---|
+| T0 | ブランチ作成と計画書の保存 | `docs/` | ✅ 完了 |
+| T1 | 座標系の確認(CARLAの座標、`pose()` の `map` 座標、osmの `local_x/local_y` の関係) | 調査のみ | 未着手 |
+| T2 | 地図に信号を追加するツール | `tools/carla_tl_to_lanelet2.py`(新規) | 未着手 |
+| T3 | 信号publishのロジック(ROSに依存しない部分) | `modules/traffic_light_publisher.py`(新規) | 未着手 |
+| T4 | ROSパラメータとpublisherの追加 | `carla_ros.py` | 未着手 |
+| T5 | 毎tickのpublish | `carla_autoware.py` | 未着手 |
+| T6 | `force_green` と排他チェック、終了時の解除 | `carla_autoware.py` | 未着手 |
+| T7 | launchの引数追加、カメラ認識の停止 | 両方のlaunch | 未着手 |
+| T8 | 単体テスト | `test/traffic_light_publisher_test.py`(新規) | 未着手 |
+| T9 | 実機での確認 | – | 未着手 |
+| T10 | ドキュメント(起動手順書、README) | `docs/`、`README.md` | 未着手 |
+
+進める順番: T0 → T1 → T3+T8 → T4/T5 → T6 → T2 → T7 → T9 → T10
+
+T2が終わる前でも、`id_map` を使うか、IDが一致する仮の地図を使えば、トピックが出ることまでは
+確かめられる。T2は座標の確認(T1)に左右され、作業量も読みにくいので、独立したStepとして扱う。
+
+---
+
+## 3. 各タスクの内容
+
+### T1: 座標系の確認
+
+- 地図上の数か所で、CARLAの座標、`pose()` がpublishする `map` 座標
+  (`carla_location_to_ros_point`、y反転)、osmの `local_x/local_y` を比べる。
+- y反転と原点のずれの有無を確定し、`map_origin_x/y` の既定値0.0がTown01・Town10HDで正しいか確かめる。
+
+### T2: 地図に信号を追加するツール
+
+CARLAに接続し、信号ごとに次を作ってosmに追記する。
+
+- `get_light_boxes()` の各信号灯 → `traffic_light` linestring(高さは信号灯の箱から決める)
+- `get_stop_waypoints()` → `stop_line` linestring(車線の幅で作る)
+- `get_affected_lane_waypoints()` → 規制を受けるlaneletを特定し(位置と向きで照合)、
+  `regulatory_element`(subtype=traffic_light、`refers`=信号灯、`ref_line`=停止線)を作る。
+  laneletには `regulatory_element` の参照を追加する。
+- regulatory elementのIDには、OpenDRIVEの信号IDを数値にして入れる。これで位置マッチングと
+  OpenDRIVE IDの代替の両方が使え、確認もしやすくなる。既存の要素とIDがぶつかる場合は
+  エラーにする。
+- 出力は別ファイル(例: `lanelet2_map_with_tl.osm`)にし、元の地図は書き換えない。
+
+### T3: 信号publishのロジック
+
+ROSとCARLAに依存しない部分を、単体テストできるように分ける。
+
+- CARLAの状態から `TrafficLightElement` 相当への変換(0章の表)
+- `id_map` の解析
+- osmを読み、信号灯(`traffic_light` linestring)とregulatory elementの対応表を作る
+- 位置マッチング(`match_distance`・`match_ratio`、同じ距離の場合の扱い)
+- グループIDの決め方(0.2の優先順)と、起動時のログ(マッチ・曖昧・遠すぎの件数)
+
+### T4: ROSパラメータとpublisher
+
+- 0.1のパラメータを `carla_ros.py` の `_initialize_parameters()` に追加する。
+- `traffic_light.publish=true` のときだけ、`TrafficLightGroupArray` のpublisherを作る。
+
+### T5: 毎tickのpublish
+
+- `world.tick()` とSUMO同期のあとに状態を集め、シミュレーション時刻をstampにしてpublishする。
+- 信号の対応付けは起動時に1回だけ行い、毎tickは状態の読み出しだけにする。
+
+### T6: force_green
+
+- 起動時に全信号を緑にしてfreezeする。終了時の解除は、既存のSUMO用の解除処理と共通化する。
+- `tls_manager=sumo/carla` との同時指定は、既存の排他チェック
+  (`_check_sumo_traffic_manager_exclusivity()` など)と同じ形で、起動時にエラーにする。
+
+### T7: launch
+
+- `autoware_carla_interface.launch.xml` に0.1の引数を追加する。
+  `traffic_light.map_path` が空のときは、既存の `map_path` から `lanelet2_map.osm` のパスを
+  作る案を検討する。
+- `e2e_simulator.launch.xml`(autoware_launch)から引数を渡す。`publish=true` のときは
+  `use_traffic_light_recognition` を止め、同じトピックに2つのノードがpublishしないようにする。
+- autoware_launchのコミットされていない変更と分けてコミットするかは、この時点で決める。
+
+### T8: 単体テスト
+
+- 状態の変換、`id_map` の解析、マッチング(正常・曖昧・同じ距離・遠すぎ)、OpenDRIVE IDでの代替。
+- 既存の `test/stand_ins.py` の方式に合わせ、CARLAなしでも動くようにする。
+
+### T9: 実機での確認
+
+1. `ros2 topic echo /perception/traffic_light_recognition/traffic_signals` で状態とIDを確認する
+2. CARLAで信号を手動で変えたとき、トピックも変わる
+3. Town01で、赤信号の停止線でEGOが止まり、青で発進する
+4. `tls_manager=sumo` で、SUMOの信号とトピックが一致する
+5. `force_green` で全信号が緑のまま変わらない
+
+### T10: ドキュメント
+
+- 起動手順書(2.4.1のオプション一覧)に新しい引数を追加する。
+- READMEに、地図の作り方と使い方を追記する。
