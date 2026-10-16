@@ -78,7 +78,7 @@ Autowareへ直接通知する。
 | # | タスク | 主な変更先 | 状態 |
 |---|---|---|---|
 | T0 | ブランチ作成と計画書の保存 | `docs/` | ✅ 完了 |
-| T1 | 座標系の確認(CARLAの座標、`pose()` の `map` 座標、osmの `local_x/local_y` の関係) | 調査のみ | 未着手 |
+| T1 | 座標系の確認(CARLAの座標、`pose()` の `map` 座標、osmの `local_x/local_y` の関係) | 調査のみ | ✅ 完了(Town01) |
 | T2 | 地図に信号を追加するツール | `tools/carla_tl_to_lanelet2.py`(新規) | 未着手 |
 | T3 | 信号publishのロジック(ROSに依存しない部分) | `modules/traffic_light_publisher.py`(新規) | 未着手 |
 | T4 | ROSパラメータとpublisherの追加 | `carla_ros.py` | 未着手 |
@@ -103,6 +103,24 @@ T2が終わる前でも、`id_map` を使うか、IDが一致する仮の地図�
 - 地図上の数か所で、CARLAの座標、`pose()` がpublishする `map` 座標
   (`carla_location_to_ros_point`、y反転)、osmの `local_x/local_y` を比べる。
 - y反転と原点のずれの有無を確定し、`map_origin_x/y` の既定値0.0がTown01・Town10HDで正しいか確かめる。
+
+#### 結果(2026-10-16、CARLA 0.9.15、Town01)
+
+- **`map_x = carla_x`、`map_y = -carla_y`(y反転のみ、原点のずれなし)。** `map_origin_x/y` の
+  既定値0.0のままで正しい。`pose()`(`carla_location_to_ros_point`)の変換とも一致する。
+  - 確かめ方: CARLAの車線中心のwaypoint(20 m間隔、370点)をy反転してosmに重ね、
+    いずれかのlaneletの左右境界の間に入るかを調べた。全点で「左境界までの距離+右境界までの
+    距離 = 車線幅(4.0 m)」となり、誤差は0.01 m未満だった。y反転しない場合は大きくずれる。
+- osmのnodeは `ele` がすべて0.0。CARLAの道路の高さもほぼ0なので、信号灯の高さはCARLAの
+  z座標をそのまま使ってよい。
+- osmのIDの最大値: node 3522、way 3534、relation 3539。T2で追加する要素は、これと
+  ぶつからないIDにする。
+- Town01の信号: actorは36個で、OpenDRIVE IDはすべて異なる。どの信号も、信号灯
+  (`get_light_boxes()`)が1つ、停止位置(`get_stop_waypoints()`)が1つ。
+  `get_group_traffic_lights()` で、同じ交差点の信号のまとまりが取れる(例: 360・361・362)。
+- 補足: CARLAが同期モードのまま一度もtickされていないと、`get_actors()` が空になる。
+  T2のツールでは、最初に1回tickしてからactorを取得する。
+- Town10HDは、CARLAの地図を切り替える必要があるため未確認。使うときに同じ方法で確かめる。
 
 ### T2: 地図に信号を追加するツール
 
