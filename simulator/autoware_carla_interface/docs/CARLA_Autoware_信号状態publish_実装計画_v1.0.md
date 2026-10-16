@@ -79,7 +79,7 @@ Autowareへ直接通知する。
 | --- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
 | T0  | ブランチ作成と計画書の保存                                                        | `docs/`                                                                                                                  | ✅ 完了                                         |
 | T1  | 座標系の確認(CARLAの座標、`pose()` の `map` 座標、osmの `local_x/local_y` の関係) | 調査のみ                                                                                                                 | ✅ 完了(Town01)                                 |
-| T2  | 地図に信号を追加するツール                                                        | `tools/carla_tl_to_lanelet2.py`(新規)                                                                                    | 未着手                                          |
+| T2  | 地図に信号を追加するツール                                                        | `tools/carla_tl_to_lanelet2.py`、`test/test_carla_tl_to_lanelet2.py`(新規)                                               | ✅ 完了(Town01)                                 |
 | T3  | 信号publishのロジック(ROSに依存しない部分)                                        | `modules/traffic_light_matcher.py`(upstreamから移植)、`modules/traffic_light_publisher.py`(新規)                         | ✅ 完了                                         |
 | T4  | ROSパラメータとpublisherの追加                                                    | `carla_ros.py`、`carla_autoware.py`(起動時チェック)                                                                      | ✅ 完了                                         |
 | T5  | 毎tickのpublish                                                                   | `carla_ros.py`(`run_step()`)                                                                                             | ✅ 完了                                         |
@@ -135,6 +135,57 @@ CARLAに接続し、信号ごとに次を作ってosmに追記する。
   OpenDRIVE IDの代替の両方が使え、確認もしやすくなる。既存の要素とIDがぶつかる場合は
   エラーにする。
 - 出力は別ファイル(例: `lanelet2_map_with_tl.osm`)にし、元の地図は書き換えない。
+
+#### 結果(T2)
+
+- `tools/carla_tl_to_lanelet2.py` を追加した。CARLAに接続して信号を読み取り、Lanelet2地図に
+  次を追加して別ファイルに書き出す(元の地図は変更しない)。
+  - 信号灯: 信号灯の箱の下辺を `traffic_light` linestring(`subtype=red_yellow_green`、
+    `height`=箱の高さ)にする。中点が信号灯の中心になるので、ブリッジの位置マッチングの
+    照合点と一致する。
+  - 停止線: 停止位置(`get_stop_waypoints()`)を通り、車線の幅で進行方向に直交する `stop_line`。
+  - regulatory element: `type=regulatory_element`、`subtype=traffic_light`。
+    メンバーは `refers`(信号灯)と `ref_line`(停止線)。IDはOpenDRIVEの信号ID
+    (`--group-id-offset` を加える)。
+  - 停止位置を含み、向きが同じ(45度以内)laneletに、regulatory elementへの参照を追加する。
+    Autowareの traffic_light モジュールは、regulatory elementを持つlaneletごとにシーンを作り、
+    信号状態をregulatory elementのIDで引く(`scene.cpp`)ので、手前の1つのlaneletで足りる。
+  - `light_bulbs` は作らない。Autowareでは矢印信号の判定にしか使わない(`manager.cpp`)。
+- 新しいnodeの `lat/lon` は、入力の地図の既存nodeから求めた比例係数で付ける
+  (Town01・Town10HDとも、lon ≈ 8.974e-6 × local_x、lat ≈ 9.035e-6 × local_y)。
+- 安全のためのチェック: OpenDRIVE IDが既存のIDとぶつかる場合、地図にすでに信号の
+  regulatory elementがある場合は、エラーで止まる(Lanelet2のIDは種類をまたいで一意)。
+  停止位置に合うlaneletがない場合は警告して、終了コード2を返す。
+- 1つの信号に停止位置が複数ある場合は、停止位置ごとにregulatory elementを作る。OpenDRIVEの
+  IDを持つのは最初の1つだけなので、この場合は `traffic_light.map_path`(位置マッチング)が必要。
+- 単体テスト `test/test_carla_tl_to_lanelet2.py` を追加した(14件。全体でROSなし67件成功・
+  1件スキップ)。`--from-json`(`--dump-json` で保存したデータ)を使えば、CARLAなしでも動く。
+
+使い方:
+
+```bash
+# CARLAで地図(Town01)を読み込んだ状態で実行する
+python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/Town01/lanelet2_map.osm
+# -> ~/autoware_map/Town01/lanelet2_map_with_tl.osm
+```
+
+出力は元の地図と同じフォルダに置く(CARLAの地図名はフォルダ名から決まるため)。Autowareには
+`lanelet2_map_file:=lanelet2_map_with_tl.osm`、ブリッジには
+`traffic_light.map_path:=<フォルダ>/lanelet2_map_with_tl.osm` で渡す(T7で起動引数に反映する)。
+
+#### 実機での確認(2026-10-16、CARLA 0.9.15、Town01)
+
+| 確認                       | 結果                                                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| ツールの実行               | 36信号すべてについてregulatory elementを追加。36個とも別々のlaneletに付いた                                                    |
+| Lanelet2(Python)で読み込み | エラー0件。TrafficLightが36個、どれも停止線と信号灯1つを持つ                                                                   |
+| 停止線の位置               | どれもlaneletの終わり(交差点の入口)から7〜13 m手前                                                                             |
+| 位置マッチング(ブリッジ)   | 「36 matched、0 ambiguous、0 too far」。どの信号も自分のOpenDRIVE IDに対応し、ずれは1 µm未満。別の信号の信号灯までは最短18.6 m |
+| トピック                   | 36グループがpublishされた                                                                                                      |
+
+- 生成した地図は `~/autoware_map/Town01/lanelet2_map_with_tl.osm` に置いた(T9で使う)。
+- Town10HDは未確認(CARLAの地図の切り替えが必要)。Town10HDの既存IDは1から始まるので、
+  OpenDRIVE IDとぶつかる場合は `--group-id-offset` を使う。
 
 ### T3: 信号publishのロジック
 
