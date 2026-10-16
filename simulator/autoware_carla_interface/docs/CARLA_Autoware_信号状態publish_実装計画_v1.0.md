@@ -75,19 +75,19 @@ Autowareへ直接通知する。
 
 ## 2. タスク一覧
 
-| #   | タスク                                                                            | 主な変更先                                                                                                               | 状態                                            |
-| --- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
-| T0  | ブランチ作成と計画書の保存                                                        | `docs/`                                                                                                                  | ✅ 完了                                         |
-| T1  | 座標系の確認(CARLAの座標、`pose()` の `map` 座標、osmの `local_x/local_y` の関係) | 調査のみ                                                                                                                 | ✅ 完了(Town01)                                 |
-| T2  | 地図に信号を追加するツール                                                        | `tools/carla_tl_to_lanelet2.py`、`test/test_carla_tl_to_lanelet2.py`(新規)                                               | ✅ 完了(Town01)                                 |
-| T3  | 信号publishのロジック(ROSに依存しない部分)                                        | `modules/traffic_light_matcher.py`(upstreamから移植)、`modules/traffic_light_publisher.py`(新規)                         | ✅ 完了                                         |
-| T4  | ROSパラメータとpublisherの追加                                                    | `carla_ros.py`、`carla_autoware.py`(起動時チェック)                                                                      | ✅ 完了                                         |
-| T5  | 毎tickのpublish                                                                   | `carla_ros.py`(`run_step()`)                                                                                             | ✅ 完了                                         |
-| T6  | `force_green` と排他チェック、終了時の解除                                        | `carla_autoware.py`                                                                                                      | ✅ 完了                                         |
-| T7  | launchの引数追加、カメラ認識の停止                                                | 両方のlaunch                                                                                                             | 一部完了(`autoware_carla_interface.launch.xml`) |
-| T8  | 単体テスト                                                                        | `test/test_traffic_light_matcher.py`(upstreamから移植)、`test/test_traffic_light_publisher.py`、`test/conftest.py`(新規) | ✅ 完了                                         |
-| T9  | 実機での確認                                                                      | –                                                                                                                        | 未着手                                          |
-| T10 | ドキュメント(起動手順書、README)                                                  | `docs/`、`README.md`                                                                                                     | 未着手                                          |
+| #   | タスク                                                                            | 主な変更先                                                                                                               | 状態                                 |
+| --- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| T0  | ブランチ作成と計画書の保存                                                        | `docs/`                                                                                                                  | ✅ 完了                              |
+| T1  | 座標系の確認(CARLAの座標、`pose()` の `map` 座標、osmの `local_x/local_y` の関係) | 調査のみ                                                                                                                 | ✅ 完了(Town01)                      |
+| T2  | 地図に信号を追加するツール                                                        | `tools/carla_tl_to_lanelet2.py`、`test/test_carla_tl_to_lanelet2.py`(新規)                                               | ✅ 完了(Town01)                      |
+| T3  | 信号publishのロジック(ROSに依存しない部分)                                        | `modules/traffic_light_matcher.py`(upstreamから移植)、`modules/traffic_light_publisher.py`(新規)                         | ✅ 完了                              |
+| T4  | ROSパラメータとpublisherの追加                                                    | `carla_ros.py`、`carla_autoware.py`(起動時チェック)                                                                      | ✅ 完了                              |
+| T5  | 毎tickのpublish                                                                   | `carla_ros.py`(`run_step()`)                                                                                             | ✅ 完了                              |
+| T6  | `force_green` と排他チェック、終了時の解除                                        | `carla_autoware.py`                                                                                                      | ✅ 完了                              |
+| T7  | launchの引数追加、カメラ認識の停止                                                | `autoware_carla_interface.launch.xml`、`e2e_simulator.launch.xml`(autoware_launch)                                       | ✅ 完了(autoware_launchは未コミット) |
+| T8  | 単体テスト                                                                        | `test/test_traffic_light_matcher.py`(upstreamから移植)、`test/test_traffic_light_publisher.py`、`test/conftest.py`(新規) | ✅ 完了                              |
+| T9  | 実機での確認                                                                      | –                                                                                                                        | 未着手                               |
+| T10 | ドキュメント(起動手順書、README)                                                  | `docs/`、`README.md`                                                                                                     | 未着手                               |
 
 進める順番: T0 → T1 → T3+T8 → T4/T5 → T6 → T2 → T7 → T9 → T10
 
@@ -319,6 +319,85 @@ ROSとCARLAに依存しない部分を、単体テストできるように分け
 - `e2e_simulator.launch.xml`(autoware_launch)から引数を渡す。`publish=true` のときは
   `use_traffic_light_recognition` を止め、同じトピックに2つのノードがpublishしないようにする。
 - autoware_launchのコミットされていない変更と分けてコミットするかは、この時点で決める。
+
+#### 結果(T7)
+
+- `autoware_carla_interface.launch.xml`
+  - `traffic_light.*` 引数はT4で追加済み。
+  - `traffic_light.publish=true` のときは、カメラの信号認識向けのノード
+    (`traffic_light_image_relay`・`traffic_light_camera_info_relay`・`traffic_light_republish`)を
+    起動しない。CAM_FRONTの画像を毎フレーム変換・publishする負荷がなくなる。
+- `e2e_simulator.launch.xml`(autoware_launch)
+  - `traffic_light.*` の6つの引数を追加し、`autoware_carla_interface.launch.xml` に渡す。
+  - `traffic_light.map_path` の既定値は `$(var map_path)/$(var lanelet2_map_file)`
+    (Autowareが読み込むのと同じ地図)。Autowareが信号を引くregulatory elementと、ブリッジが
+    対応付けるregulatory elementが必ず同じ地図のものになる。`""` を指定するとOpenDRIVE IDを
+    そのまま使う。
+  - `traffic_light.publish=true` のときは `<let name="use_traffic_light_recognition" value="false">`
+    で、カメラによる信号認識(`perception.launch.xml` の traffic_light_recognition グループ)を
+    起動しない。このグループだけが `/perception/traffic_light_recognition/traffic_signals` を
+    publishするので、publisherがブリッジだけになる。`autoware.launch.xml` はこの引数を渡さないが、
+    launchの設定値はincludeに引き継がれ、`<arg default=...>` より優先されることを小さなlaunchで
+    確かめた。
+- **autoware_launchへの変更はコミットしていない。** autoware_launchはブランチのないdetached
+  HEADで、SUMO・Vissim用の変更もコミットせずに作業ツリーに置いている。それに合わせた。
+  今回追加した差分は次のとおり(作業ツリー上の既存の変更に対する差分)。
+
+```diff
+--- a/e2e_simulator.launch.xml
++++ b/e2e_simulator.launch.xml
+@@ -84,6 +84,26 @@
+   <arg name="pointcloud_map_file" default="pointcloud_map.pcd" description="pointcloud map file name"/>
+   <!-- Perception -->
+   <arg name="traffic_light_namespace" default="[traffic_light]" description="traffic light recognition namespace"/>
++  <!-- CARLA traffic-light state publishing (only used when simulator_type is 'carla'; see
++       autoware_carla_interface/docs/CARLA_Autoware_信号状態publish_実装計画_v1.0.md).
++       With traffic_light.publish, autoware_carla_interface publishes the CARLA traffic-light states on
++       /perception/traffic_light_recognition/traffic_signals, so the camera-based traffic light
++       recognition is not launched (it would publish on the same topic).
++       For Autoware to stop at the lights, the lanelet2 map needs traffic-light regulatory elements:
++       generate them with autoware_carla_interface/tools/carla_tl_to_lanelet2.py and pass
++       lanelet2_map_file:=lanelet2_map_with_tl.osm. -->
++  <arg name="traffic_light.publish" default="false" description="Publish CARLA traffic-light states instead of running camera-based traffic light recognition (CARLA simulator_type only)"/>
++  <arg name="traffic_light.force_green" default="false" description="Set every CARLA traffic light to green and freeze it there at startup (CARLA simulator_type only)"/>
++  <arg
++    name="traffic_light.map_path"
++    default="$(var map_path)/$(var lanelet2_map_file)"
++    description="Lanelet2 map (.osm) the CARLA traffic lights are matched to by position; defaults to the map Autoware loads. Empty uses the OpenDRIVE signal id as the group id"
++  />
++  <arg name="traffic_light.match_distance" default="5.0" description="Max head-to-head distance (m) accepted when matching a CARLA traffic light to a lanelet2 head"/>
++  <arg name="traffic_light.match_ratio" default="0.6" description="Ambiguity threshold: reject a match when nearest &gt; ratio * second-nearest (different signal). Lower is stricter"/>
++  <arg name="traffic_light.id_map" default="" description="Optional override 'opendrive_id:group_id[|group_id...],...', taking precedence over position matching"/>
++  <!-- Picked up by tier4_perception_component.launch.xml (inherited through autoware.launch.xml). -->
++  <let name="use_traffic_light_recognition" value="false" if="$(var traffic_light.publish)"/>
+   <!-- Control -->
+   <!-- Vehicle -->
+   <arg name="launch_vehicle_interface" default="false"/>
+@@ -129,6 +149,12 @@
+         <arg name="vehicle_type" value="$(var vehicle_type)"/>
+         <arg name="spawn_point" value="$(var spawn_point)"/>
+         <arg name="spectator_follow" value="$(var spectator_follow)"/>
++        <arg name="traffic_light.publish" value="$(var traffic_light.publish)"/>
++        <arg name="traffic_light.force_green" value="$(var traffic_light.force_green)"/>
++        <arg name="traffic_light.map_path" value="$(var traffic_light.map_path)"/>
++        <arg name="traffic_light.match_distance" value="$(var traffic_light.match_distance)"/>
++        <arg name="traffic_light.match_ratio" value="$(var traffic_light.match_ratio)"/>
++        <arg name="traffic_light.id_map" value="$(var traffic_light.id_map)"/>
+       </include>
+     </group>
+   </group>
+```
+
+#### 確認(2026-10-16)
+
+| 確認                                                               | 結果                                                                                                    |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `ros2 launch autoware_launch e2e_simulator.launch.xml --show-args` | `traffic_light.*` の6つの引数が表示される。`map_path` の既定値は `map_path` + `/` + `lanelet2_map_file` |
+| `<let ... if=...>` が入れ子のincludeに届くか(小さなlaunchで確認)   | `publish:=true` で `false`、`publish:=false` で既定値の `true` になる                                   |
+| `autoware_carla_interface.launch.xml traffic_light.publish:=true`  | 信号認識用の3ノードが起動しない。36信号のpublishは動く                                                  |
+| 同 `traffic_light.publish:=false`                                  | 3ノードが従来どおり起動する                                                                             |
+
+Autoware全体を起動したときの確認(カメラの信号認識が起動しないこと、赤信号で止まること)はT9で行う。
 
 ### T8: 単体テスト
 

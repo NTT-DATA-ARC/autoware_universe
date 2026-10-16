@@ -158,20 +158,22 @@
     <!-- Relay CAM_FRONT to traffic_light namespace for traffic light recognition.
          These relays subscribe the raw image, which forces the interface to
          convert and publish every CAM_FRONT frame; skip them in light-weight
-         mode like the republish nodes below. -->
+         mode like the republish nodes below, and with traffic_light.publish
+         (the CARLA states replace camera-based recognition, see
+         docs/CARLA_Autoware_信号状態publish_実装計画_v1.0.md T7). -->
     <node
       pkg="topic_tools"
       exec="relay"
       name="traffic_light_image_relay"
       args="/sensing/camera/CAM_FRONT/image_raw /sensing/camera/traffic_light/image_raw"
-      unless="$(var use_light_weight_sensor_mapping)"
+      if="$(eval &quot;'$(var use_light_weight_sensor_mapping)'.lower() != 'true' and '$(var traffic_light.publish)'.lower() != 'true'&quot;)"
     />
     <node
       pkg="topic_tools"
       exec="relay"
       name="traffic_light_camera_info_relay"
       args="/sensing/camera/CAM_FRONT/camera_info /sensing/camera/traffic_light/camera_info"
-      unless="$(var use_light_weight_sensor_mapping)"
+      if="$(eval &quot;'$(var use_light_weight_sensor_mapping)'.lower() != 'true' and '$(var traffic_light.publish)'.lower() != 'true'&quot;)"
     />
 
     <!-- Image transport nodes to create compressed versions for all cameras -->
@@ -223,7 +225,7 @@
       exec="republish"
       name="traffic_light_republish"
       args="raw compressed --ros-args -r in:=/sensing/camera/traffic_light/image_raw -r out/compressed:=/sensing/camera/traffic_light/image_raw/compressed"
-      unless="$(var use_light_weight_sensor_mapping)"
+      if="$(eval &quot;'$(var use_light_weight_sensor_mapping)'.lower() != 'true' and '$(var traffic_light.publish)'.lower() != 'true'&quot;)"
     />
 
     <!-- Multi-camera combiner for RViz visualization -->
