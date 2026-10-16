@@ -114,7 +114,7 @@ ros2 launch autoware_launch e2e_simulator.launch.xml \
   sync_vehicle_lights:=true \
   sync_vehicle_color:=true \
   sumo_warmup_time:=600 \
-  spawn_point:="199.95,326.97,0.30,0.0,0.0,180.0" \
+  spawn_point:="334.74,263.00,0.30,0.0,0.0,90.0" \
   spectator_follow:=true \
   2>&1 | tee -i /tmp/autoware_carla.log
 ```
@@ -135,7 +135,7 @@ ros2 launch autoware_launch e2e_simulator.launch.xml \
 | `sync_vehicle_lights` | 灯火同期 | `true` | `false` |
 | `sync_vehicle_color` | 車体色同期 | `true` | `false` |
 | `spectator_follow` | EGO車両(role_name=`ego_vehicle_role_name`)にCARLAスペクテーターを自動追従させる | `true` | `false` |
-| `spawn_point` | EGOのスポーン位置(CARLA座標、`x,y,z,roll,pitch,yaw`) | `"199.95,326.97,0.30,0.0,0.0,180.0"` | `None`(ランダム) |
+| `spawn_point` | EGOのスポーン位置(CARLA座標、`x,y,z,roll,pitch,yaw`) | `"334.74,263.00,0.30,0.0,0.0,90.0"` | `None`(ランダム) |
 | `vehicle_type` | EGOのCARLAブループリント | `vehicle.toyota.prius` | `vehicle.toyota.prius` |
 | `sumo_warmup_time` | SUMOだけを先に進める秒数(整数)。0で無効。2.4.2参照 | `600` | `0`(無効) |
 | `ego_spawn_front_margin` | EGOスポーン時に必要な前方車とのすき間 [m]。2.4.2参照 | `20.0` | `20.0` |
