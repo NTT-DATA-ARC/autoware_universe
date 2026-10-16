@@ -75,19 +75,19 @@ Autowareへ直接通知する。
 
 ## 2. タスク一覧
 
-| #   | タスク                                                                            | 主な変更先                                                                                                               | 状態            |
-| --- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------- |
-| T0  | ブランチ作成と計画書の保存                                                        | `docs/`                                                                                                                  | ✅ 完了         |
-| T1  | 座標系の確認(CARLAの座標、`pose()` の `map` 座標、osmの `local_x/local_y` の関係) | 調査のみ                                                                                                                 | ✅ 完了(Town01) |
-| T2  | 地図に信号を追加するツール                                                        | `tools/carla_tl_to_lanelet2.py`(新規)                                                                                    | 未着手          |
-| T3  | 信号publishのロジック(ROSに依存しない部分)                                        | `modules/traffic_light_matcher.py`(upstreamから移植)、`modules/traffic_light_publisher.py`(新規)                         | ✅ 完了         |
-| T4  | ROSパラメータとpublisherの追加                                                    | `carla_ros.py`                                                                                                           | 未着手          |
-| T5  | 毎tickのpublish                                                                   | `carla_autoware.py`                                                                                                      | 未着手          |
-| T6  | `force_green` と排他チェック、終了時の解除                                        | `carla_autoware.py`                                                                                                      | 未着手          |
-| T7  | launchの引数追加、カメラ認識の停止                                                | 両方のlaunch                                                                                                             | 未着手          |
-| T8  | 単体テスト                                                                        | `test/test_traffic_light_matcher.py`(upstreamから移植)、`test/test_traffic_light_publisher.py`、`test/conftest.py`(新規) | ✅ 完了         |
-| T9  | 実機での確認                                                                      | –                                                                                                                        | 未着手          |
-| T10 | ドキュメント(起動手順書、README)                                                  | `docs/`、`README.md`                                                                                                     | 未着手          |
+| #   | タスク                                                                            | 主な変更先                                                                                                               | 状態                                            |
+| --- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| T0  | ブランチ作成と計画書の保存                                                        | `docs/`                                                                                                                  | ✅ 完了                                         |
+| T1  | 座標系の確認(CARLAの座標、`pose()` の `map` 座標、osmの `local_x/local_y` の関係) | 調査のみ                                                                                                                 | ✅ 完了(Town01)                                 |
+| T2  | 地図に信号を追加するツール                                                        | `tools/carla_tl_to_lanelet2.py`(新規)                                                                                    | 未着手                                          |
+| T3  | 信号publishのロジック(ROSに依存しない部分)                                        | `modules/traffic_light_matcher.py`(upstreamから移植)、`modules/traffic_light_publisher.py`(新規)                         | ✅ 完了                                         |
+| T4  | ROSパラメータとpublisherの追加                                                    | `carla_ros.py`、`carla_autoware.py`(起動時チェック)                                                                      | ✅ 完了                                         |
+| T5  | 毎tickのpublish                                                                   | `carla_ros.py`(`run_step()`)                                                                                             | ✅ 完了                                         |
+| T6  | `force_green` と排他チェック、終了時の解除                                        | `carla_autoware.py`                                                                                                      | 未着手                                          |
+| T7  | launchの引数追加、カメラ認識の停止                                                | 両方のlaunch                                                                                                             | 一部完了(`autoware_carla_interface.launch.xml`) |
+| T8  | 単体テスト                                                                        | `test/test_traffic_light_matcher.py`(upstreamから移植)、`test/test_traffic_light_publisher.py`、`test/conftest.py`(新規) | ✅ 完了                                         |
+| T9  | 実機での確認                                                                      | –                                                                                                                        | 未着手                                          |
+| T10 | ドキュメント(起動手順書、README)                                                  | `docs/`、`README.md`                                                                                                     | 未着手                                          |
 
 進める順番: T0 → T1 → T3+T8 → T4/T5 → T6 → T2 → T7 → T9 → T10
 
@@ -189,6 +189,44 @@ ROSとCARLAに依存しない部分を、単体テストできるように分け
 
 - `world.tick()` とSUMO同期のあとに状態を集め、シミュレーション時刻をstampにしてpublishする。
 - 信号の対応付けは起動時に1回だけ行い、毎tickは状態の読み出しだけにする。
+
+#### 結果(T4/T5)
+
+- `carla_ros.py`
+  - パラメータ `traffic_light.publish`・`force_green`・`map_path`・`match_distance`・
+    `match_ratio`・`id_map` を追加した(名前と既定値はupstreamと同じ)。
+  - `traffic_light.publish=true` のときだけ、`TrafficLightGroupArray` のpublisher
+    (`/perception/traffic_light_recognition/traffic_signals`、depth 1、reliable)を作る。
+  - `run_step()` の最後(`ego_status()` の後)で `_publish_traffic_lights()` を呼ぶ。
+    `run_step()` は直前にtickしたフレームを処理するので、状態はそのフレームのもの、
+    stampはそのフレームのシミュレーション時刻になる。SUMO連携時は、SUMOが
+    `sync_sumo_to_carla()` で設定した状態が、次のtickの後にpublishされる。
+  - 信号の対応付けは、最初にpublishするtickで1回だけ行う。
+  - `traffic_light.map_path` が読めない場合(壊れたosmなど)はエラーログを出し、何もpublishしない。
+- `carla_autoware.py`: 起動時のパラメータチェック `_check_traffic_light_params()` を追加した
+  (中身は `traffic_light_publisher.validate_traffic_light_params()`)。`map_path` が
+  ファイルでない、`match_distance <= 0`、`match_ratio` が (0, 1] の外、のいずれかで起動を止める。
+- T7の一部を前倒しした: `autoware_carla_interface.launch.xml` に引数を追加した(実機確認のため)。
+  `match_distance`・`match_ratio` は、整数で指定してもDOUBLEになるよう `float()` を通す。
+- **`map_origin_x/y` は追加しない。** ローカルの `pose()`・`initialpose` は原点のずれに
+  対応しておらず、信号だけにずれを入れると座標がそろわなくなる。Town01では0で正しい(T1)。
+  必要になったら、`pose()` などと合わせて別のタスクで対応する。
+- 対応付けできた信号が1つもない場合は、メッセージをpublishしない(upstreamと同じ)。
+
+#### 実機での確認(2026-10-16、CARLA 0.9.15、Town01、Autowareなしでブリッジ単体を起動)
+
+| 条件                                                                    | 結果                                                                                                                                             |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `traffic_light.publish:=true`、`"traffic_light.id_map:=360:9000\|9001"` | 起動ログ「35信号をOpenDRIVE IDで、1信号をid_mapで」。トピックに37グループ(9000・9001あり、360なし)。毎tickのpublish、stampはシミュレーション時刻 |
+| 同上で、40秒間CARLAの状態と比較                                         | 315回中314回一致(1回はtickの最中に比べたため)。12グループで 青→黄→赤 の変化を確認                                                                |
+| `traffic_light.map_path:=` Town01の `lanelet2_map.osm`                  | 「0 matched」と「地図に信号灯がない」警告。ブリッジは動き続け、トピックは出ない(T2が必要)                                                        |
+| `traffic_light.map_path:=/no/such.osm`                                  | 起動時に「is not a file」のエラーで停止                                                                                                          |
+
+- 実機確認で見つけた不具合を修正した: rclpyでは、同じ呼び出し箇所から重要度の違うログを
+  出すと例外になる(`Logger severity cannot be changed between calls`)。起動時ログを
+  infoとwarningで別の呼び出し箇所にした。
+- `id_map` の値に `:` や `|` を含めても、launchから文字列のまま渡ることを確認した
+  (`|` を含むので、コマンドラインでは引用符で囲む)。
 
 ### T6: force_green
 

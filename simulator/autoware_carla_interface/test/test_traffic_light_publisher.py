@@ -236,3 +236,31 @@ def test_lights_without_groups_or_state_are_skipped():
     groups = {1: [], 2: [800], 3: [900]}
     states = {1: "Red", 2: "Green"}  # actor 3 has no state
     assert tlp.build_group_states(groups, states) == {800: (tlp.COLOR_GREEN, tlp.STATUS_SOLID_ON)}
+
+
+# --- startup parameter check ------------------------------------------------------------
+
+
+def test_params_are_not_checked_when_publishing_is_disabled():
+    tlp.validate_traffic_light_params(False, "/no/such/map.osm", -1.0, 5.0)
+
+
+def test_valid_params_pass(tmp_path):
+    osm = tmp_path / "lanelet2_map.osm"
+    osm.write_text("<osm/>")
+    tlp.validate_traffic_light_params(True, str(osm), 5.0, 0.6)
+    tlp.validate_traffic_light_params(True, "", 5.0, 1.0)
+
+
+@pytest.mark.parametrize(
+    "map_path, distance, ratio, message",
+    [
+        ("/no/such/map.osm", 5.0, 0.6, "is not a file"),
+        ("", 0.0, 0.6, "match_distance"),
+        ("", 5.0, 0.0, "match_ratio"),
+        ("", 5.0, 1.5, "match_ratio"),
+    ],
+)
+def test_invalid_params_are_rejected(map_path, distance, ratio, message):
+    with pytest.raises(ValueError, match=message):
+        tlp.validate_traffic_light_params(True, map_path, distance, ratio)

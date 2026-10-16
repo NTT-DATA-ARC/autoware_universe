@@ -24,6 +24,8 @@ Inputs are plain values (CARLA states by name, positions as tuples), so the call
 ``carla_ros.py`` only has to read the CARLA actors and build the ROS message.
 """
 
+import os
+
 from .traffic_light_matcher import MatchResult
 from .traffic_light_matcher import match_traffic_lights
 from .traffic_light_matcher import parse_id_map_override
@@ -86,6 +88,26 @@ def carla_head_map_point(light_box_locations, fallback_location, origin_x=0.0, o
     else:
         x, y = fallback_location[0], fallback_location[1]
     return (x + origin_x, -y + origin_y)
+
+
+def validate_traffic_light_params(publish, map_path, match_distance, match_ratio):
+    """Raise ``ValueError`` if the traffic_light.* parameters cannot work.
+
+    Checked at startup so a typo fails the launch instead of silently publishing
+    nothing. With ``publish`` False (default) every value is accepted.
+    """
+    if not publish:
+        return
+    map_path = str(map_path or "").strip()
+    if map_path and not os.path.isfile(map_path):
+        raise ValueError(
+            f"traffic_light.map_path '{map_path}' is not a file. Give the lanelet2 .osm "
+            f"used by Autoware, or leave it empty to use the OpenDRIVE signal ids."
+        )
+    if not match_distance > 0.0:
+        raise ValueError(f"traffic_light.match_distance must be > 0 (got {match_distance})")
+    if not 0.0 < match_ratio <= 1.0:
+        raise ValueError(f"traffic_light.match_ratio must be in (0, 1] (got {match_ratio})")
 
 
 def _parse_opendrive_id(opendrive_id):

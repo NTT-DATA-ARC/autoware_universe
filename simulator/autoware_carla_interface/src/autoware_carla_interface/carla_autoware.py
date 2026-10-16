@@ -100,7 +100,7 @@ class SensorLoop(object):
         if self.timestamp_last_run < timestamp.elapsed_seconds and self.running:
             # Measurement-only processing
             self._measure_main_loop_period(timestamp.elapsed_seconds)
-        
+
             self.timestamp_last_run = timestamp.elapsed_seconds
             GameTime.on_carla_tick(timestamp)
             CarlaDataProvider.on_carla_tick()
@@ -177,6 +177,7 @@ class InitializeInterface(object):
         try:
             self._check_sumo_traffic_manager_exclusivity()
             self._check_sumo_warmup_params()
+            self._check_traffic_light_params()
         except ValueError:
             # Invalid launch parameters: release the ROS node/spin thread created
             # above before main() reports the error and exits.
@@ -226,6 +227,22 @@ class InitializeInterface(object):
             self.ego_spawn_wait_timeout,
             self.spawn_point,
             self.tls_manager,
+        )
+
+    def _check_traffic_light_params(self):
+        """
+        Refuse to start if the traffic_light.* parameters are invalid.
+
+        See docs/CARLA_Autoware_信号状態publish_実装計画_v1.0.md (T4). With the default
+        `traffic_light.publish=False` any value is accepted, so behavior is unchanged.
+        """
+        from .modules.traffic_light_publisher import validate_traffic_light_params
+
+        validate_traffic_light_params(
+            self.param_["traffic_light.publish"],
+            self.param_["traffic_light.map_path"],
+            self.param_["traffic_light.match_distance"],
+            self.param_["traffic_light.match_ratio"],
         )
 
     def _parse_spawn_point(self):
