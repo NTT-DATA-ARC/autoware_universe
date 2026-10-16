@@ -232,6 +232,8 @@ Town01(`rou/Town01.rou.xml`、入力2か所×600台/h)で確認済みの地点:
 | — | 信号372の手前(信号状態の直接通知の確認用、2.7参照)。2.4.1の起動コマンド例の地点 | `-19.0.00` | 600台/h | `334.74,263.00,0.30,0.0,0.0,90.0` |
 
 - `sumo_warmup_time:=600`・既定の必要距離での実績: #37は空き待ち13.75秒(シミュレーション時間)でスポーン、#36は待ちなし。
+- 上の交通量と空き待ちの実績は、SUMOの信号が2交差点(CARLAの信号360〜362・372〜374)だけだったときの値。
+  2026-10-16に全12交差点(CARLAの信号36個)へSUMOの信号を設置した後は信号待ちの渋滞が起きるため、値が変わる。
 - `spawn_point`のzにはCARLAの道路の高さ(Town01ではほぼ0〜0.3)を入れる。コード側で+2 mしてスポーンする。
 
 #### 2.4.4 ログの見方
@@ -316,6 +318,8 @@ CARLAが管理している信号の状態(赤・黄・青)を、カメラ画像�
 ブリッジ(`autoware_carla_interface`)から`/perception/traffic_light_recognition/traffic_signals`へ
 毎tick publishする機能。設計と確認結果は`docs/CARLA_Autoware_信号状態publish_実装計画_v1.0.md`を参照。
 `tls_manager:=sumo`のときは、SUMOが決めた信号状態がCARLA経由でそのままAutowareに届く。
+Town01のSUMOのnet(`~/CARLA/Co-Simulation/Sumo/examples/net/Town01.net.xml`)には、CARLAの信号36個すべてに対応する信号がある
+(設置方法と信号パターンは`~/CARLA/Co-Simulation/Sumo/docs/SUMO-CARLA_co-sim_起動手順.md`の「SUMOの信号(Town01)」を参照)。
 
 #### 2.7.1 信号入りのLanelet2地図を作る(最初に1回)
 
@@ -381,6 +385,7 @@ grep -nE "Traffic-light matching|Traffic lights|traffic-light|force_green" /tmp/
 - **SUMO連携(`tls_manager:=sumo`)では、黄信号もAutowareには赤として届くことがある。**
   1つのCARLAの信号に、状態の違うSUMOの複数のリンク(例: 直進は`G`、右左折は`y`)が対応している場合、
   CARLAの信号は赤になる(既存のSUMO連携の仕様。ログに`Different SUMO traffic-light states ... CARLA state is forced to red.`が出る)。
+  Town01で起きるのは、信号パターンを手で設定した信号360と374だけ。後から設置した30個の信号は、対応するリンクが常に同じ色になる。
 - RMWは`~/.bashrc`と同じ`RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`で起動すること。Fast DDSで起動したときは
   ノードどうしの通信が一部できず、Autoを押せる状態にならなかった。
 - 確認済みの地図はTown01だけ。Town10HDなど別の地図では、2.7.1のツールが既存のIDとぶつかって止まることがある。
