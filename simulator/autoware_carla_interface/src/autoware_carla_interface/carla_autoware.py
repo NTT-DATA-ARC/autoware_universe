@@ -151,6 +151,7 @@ class InitializeInterface(object):
         self.spawn_point = self.param_["spawn_point"]
         self.use_traffic_manager = self.param_["use_traffic_manager"]
         self.max_real_delta_seconds = self.param_["max_real_delta_seconds"]
+        self.weather = self.param_["weather"]
 
         # SUMO co-simulation parameters (see docs/SUMO_CARLA_Autoware_統合_実装ステップ計画_v1.1.md)
         self.use_sumo = self.param_["use_sumo"]
@@ -348,6 +349,8 @@ class InitializeInterface(object):
             # In this case, just wait a bit more
             time.sleep(1.0)
 
+        self._apply_weather_preset()
+
         settings = self.world.get_settings()
         settings.fixed_delta_seconds = self.fixed_delta_seconds
         settings.synchronous_mode = self.sync_mode
@@ -370,6 +373,19 @@ class InitializeInterface(object):
             )
             return
         self._spawn_ego_and_sensors(client)
+
+    def _apply_weather_preset(self):
+        """Apply the `weather` parameter (name of a carla.WeatherParameters preset) to the world."""
+        preset_name = self.weather
+        weather = getattr(carla.WeatherParameters, preset_name, None)
+        if weather is None:
+            self.interface.logger.warning(
+                f"Unknown weather preset '{preset_name}', falling back to 'ClearNoon'. "
+                "Valid presets are the attribute names of carla.WeatherParameters "
+                "(e.g. ClearNoon, CloudyNoon, WetNoon, HardRainNoon, ClearNight...)."
+            )
+            weather = carla.WeatherParameters.ClearNoon
+        self.world.set_weather(weather)
 
     def _spawn_ego_and_sensors(self, client):
         """

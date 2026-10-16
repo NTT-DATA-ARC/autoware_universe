@@ -16,6 +16,7 @@
     <arg name="fixed_delta_seconds" default="0.05" description="Time step for CARLA, FPS=1/value. Unified to 0.1s to match SUMO step_length (2026-07-27 decision, see docs/SUMO_CARLA_Autoware_統合修正項目_v0.5.md 2.2)"/>
     <arg name="use_traffic_manager" default="False"/>
     <arg name="max_real_delta_seconds" default="0.05" description="Kept equal to fixed_delta_seconds so the real-time pacing cap stays at 1x (see docs/SUMO_CARLA_Autoware_統合_実装ステップ計画_v1.1.md Step 2)"/>
+    <arg name="weather" default="ClearNoon" description="CARLA weather preset to apply on load (attribute name of carla.WeatherParameters, e.g. ClearNoon, CloudyNoon, WetNoon, HardRainNoon, ClearNight)"/>
 
     <let name="carla_map" value="$(eval &quot;__import__('os').path.basename('$(var map_path)'.strip().rstrip('/')) or 'Town01'&quot;)"/>
 
@@ -76,6 +77,7 @@
       <param name="vehicle_type" value="$(var vehicle_type)"/>
       <param name="use_traffic_manager" value="$(var use_traffic_manager)"/>
       <param name="max_real_delta_seconds" value="$(var max_real_delta_seconds)"/>
+      <param name="weather" value="$(var weather)"/>
       <param name="sensor_kit_name" value="$(var sensor_kit_name)"/>
       <param name="sensor_mapping_file" value="$(var sensor_mapping_file)"/>
       <param name="use_sumo" value="$(var use_sumo)"/>
