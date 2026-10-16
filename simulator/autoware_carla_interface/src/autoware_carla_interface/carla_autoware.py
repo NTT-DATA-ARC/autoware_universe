@@ -132,6 +132,9 @@ class InitializeInterface(object):
         self.ego_actor = None
         self.prev_tick_wall_time = 0.0
         self.bridge_loop = None
+        # CARLA traffic lights frozen green by traffic_light.force_green, un-frozen at
+        # cleanup (see _force_green_traffic_lights()).
+        self._forced_green_lights = []
         self.client = None
         # Set by the SIGINT/SIGTERM handler (_stop_loop). Checked by run_bridge()
         # and, from Step S3 on, by the SUMO warmup / EGO spawn gate, which runs
@@ -233,8 +236,9 @@ class InitializeInterface(object):
         """
         Refuse to start if the traffic_light.* parameters are invalid.
 
-        See docs/CARLA_Autoware_信号状態publish_実装計画_v1.0.md (T4). With the default
-        `traffic_light.publish=False` any value is accepted, so behavior is unchanged.
+        See docs/CARLA_Autoware_信号状態publish_実装計画_v1.0.md (T4/T6). With the defaults
+        `traffic_light.publish=False` / `traffic_light.force_green=False` any value is
+        accepted, so behavior is unchanged.
         """
         from .modules.traffic_light_publisher import validate_traffic_light_params
 
@@ -243,6 +247,9 @@ class InitializeInterface(object):
             self.param_["traffic_light.map_path"],
             self.param_["traffic_light.match_distance"],
             self.param_["traffic_light.match_ratio"],
+            force_green=self.param_["traffic_light.force_green"],
+            use_sumo=self.use_sumo,
+            tls_manager=self.tls_manager,
         )
 
     def _parse_spawn_point(self):
@@ -375,6 +382,9 @@ class InitializeInterface(object):
         CarlaDataProvider.set_world(self.world)
         CarlaDataProvider.set_client(client)
 
+        # No-op unless traffic_light.force_green is enabled.
+        self._force_green_traffic_lights()
+
         # Step 3: connect to SUMO / build the sync engine before spawning EGO,
         # per the confirmed initialization order (v0.5 section 2.0). No-op
         # when `use_sumo` is False.
@@ -403,6 +413,27 @@ class InitializeInterface(object):
             )
             weather = carla.WeatherParameters.ClearNoon
         self.world.set_weather(weather)
+
+    def _force_green_traffic_lights(self):
+        """
+        Set every CARLA traffic light to green and freeze it there (traffic_light.force_green).
+
+        See docs/CARLA_Autoware_信号状態publish_実装計画_v1.0.md (T6). For camera-less
+        closed-loop runs: the ego can then pass every signalized stop line. With
+        traffic_light.publish also enabled, carla_ros publishes these green states.
+        Refused at startup together with SUMO-synchronized traffic lights
+        (_check_traffic_light_params()). Un-frozen again by _cleanup_forced_green().
+        """
+        if not self.param_["traffic_light.force_green"]:
+            return
+        lights = list(self.world.get_actors().filter("traffic.traffic_light"))
+        for light in lights:
+            light.set_state(carla.TrafficLightState.Green)
+            light.freeze(True)
+        self._forced_green_lights = lights
+        self.interface.logger.info(
+            f"traffic_light.force_green: forced {len(lights)} traffic lights to green and froze them."
+        )
 
     def _spawn_ego_and_sensors(self, client):
         """
@@ -541,6 +572,7 @@ class InitializeInterface(object):
         self._cleanup_ros_interface()
         self._cleanup_ego_actor()
         self._cleanup_sumo()
+        self._cleanup_forced_green()
         self._cleanup_carla_provider()
 
     def _cleanup_sensors(self):
@@ -571,6 +603,37 @@ class InitializeInterface(object):
             self.ego_actor = None
         except Exception as e:
             print(f"Warning: Ego actor destruction failed: {e}")
+
+    def _cleanup_forced_green(self):
+        """
+        Un-freeze the traffic lights frozen by traffic_light.force_green, continuing on error.
+
+        After un-freezing, each traffic-light group is reset once so the intersection
+        resumes a consistent cycle; otherwise every head of the group would leave the
+        freeze showing green at the same time.
+        """
+        if not self._forced_green_lights:
+            return
+        for light in self._forced_green_lights:
+            try:
+                light.freeze(False)
+            except Exception as e:
+                print(f"Warning: failed to un-freeze traffic light {light.id}: {e}")
+        reset_groups = set()
+        for light in self._forced_green_lights:
+            try:
+                group = frozenset(member.id for member in light.get_group_traffic_lights())
+                if group in reset_groups:
+                    continue
+                light.reset_group()
+                reset_groups.add(group)
+            except Exception as e:
+                print(f"Warning: failed to reset traffic-light group of {light.id}: {e}")
+        print(
+            f"Un-froze {len(self._forced_green_lights)} traffic lights "
+            f"(traffic_light.force_green) and reset {len(reset_groups)} groups."
+        )
+        self._forced_green_lights = []
 
     def _cleanup_carla_provider(self):
         """Clean up CARLA data provider, continuing on error."""

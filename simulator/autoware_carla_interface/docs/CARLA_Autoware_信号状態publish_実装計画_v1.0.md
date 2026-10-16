@@ -83,7 +83,7 @@ Autowareへ直接通知する。
 | T3  | 信号publishのロジック(ROSに依存しない部分)                                        | `modules/traffic_light_matcher.py`(upstreamから移植)、`modules/traffic_light_publisher.py`(新規)                         | ✅ 完了                                         |
 | T4  | ROSパラメータとpublisherの追加                                                    | `carla_ros.py`、`carla_autoware.py`(起動時チェック)                                                                      | ✅ 完了                                         |
 | T5  | 毎tickのpublish                                                                   | `carla_ros.py`(`run_step()`)                                                                                             | ✅ 完了                                         |
-| T6  | `force_green` と排他チェック、終了時の解除                                        | `carla_autoware.py`                                                                                                      | 未着手                                          |
+| T6  | `force_green` と排他チェック、終了時の解除                                        | `carla_autoware.py`                                                                                                      | ✅ 完了                                         |
 | T7  | launchの引数追加、カメラ認識の停止                                                | 両方のlaunch                                                                                                             | 一部完了(`autoware_carla_interface.launch.xml`) |
 | T8  | 単体テスト                                                                        | `test/test_traffic_light_matcher.py`(upstreamから移植)、`test/test_traffic_light_publisher.py`、`test/conftest.py`(新規) | ✅ 完了                                         |
 | T9  | 実機での確認                                                                      | –                                                                                                                        | 未着手                                          |
@@ -233,6 +233,32 @@ ROSとCARLAに依存しない部分を、単体テストできるように分け
 - 起動時に全信号を緑にしてfreezeする。終了時の解除は、既存のSUMO用の解除処理と共通化する。
 - `tls_manager=sumo/carla` との同時指定は、既存の排他チェック
   (`_check_sumo_traffic_manager_exclusivity()` など)と同じ形で、起動時にエラーにする。
+
+#### 結果(T6)
+
+- `carla_autoware.py`
+  - `_force_green_traffic_lights()`: `traffic_light.force_green=true` のとき、ワールドの設定
+    (同期モードなど)を反映した直後に、全信号を緑にしてfreezeする。SUMOとの接続やEGOの
+    スポーンより前に行う。
+  - `_cleanup_forced_green()`: 終了処理(`_cleanup()`)で、freezeした信号を解除する。解除の後、
+    信号のまとまり(`get_group_traffic_lights()`)ごとに1回 `reset_group()` を呼び、交差点の
+    周期を元に戻す。呼ばないと、まとまりの中の信号が全部緑のまま解除される。
+  - SUMO用の解除処理(vendor版 `CarlaSimulation.close()`)とは共通化しなかった。vendorの
+    コードには手を入れない方針で、`close()` はfreeze解除だけで `reset_group()` をしないため。
+- 起動時のチェック: `use_sumo=true` かつ `tls_manager` が `sumo` または `carla` のときは、
+  `force_green` を指定すると起動を止める。
+  - `sumo`: SUMOが毎ステップCARLAの信号を上書きするので、緑に固定できない。
+  - `carla`: 全部緑のCARLAの信号がSUMOに反映され、SUMOの車が交差点で衝突する。
+  - `tls_manager=none`、またはSUMOを使わない場合は指定できる。
+- 単体テストを7件追加した(合計54件成功・1件スキップ)。
+
+#### 実機での確認(2026-10-16、CARLA 0.9.15、Town01、ブリッジ単体)
+
+| 条件                                                               | 結果                                                                                                                                                          |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `traffic_light.publish:=true traffic_light.force_green:=true`      | 起動ログ「36信号を緑にしてfreeze」。25秒間で189メッセージ、すべてのグループがGREEN/SOLID_ON。CARLA側も36信号すべて緑・freeze中                                |
+| 上記を停止した後                                                   | ログ「36信号のfreezeを解除、12グループをreset」。CARLAを20秒(400tick)進めて、freezeは0件、どのまとまりでも緑か黄の信号は常に1つ以下、状態が変化することを確認 |
+| `use_sumo:=True tls_manager:=sumo traffic_light.force_green:=true` | 起動時にエラーで停止(SUMOに接続する前)                                                                                                                        |
 
 ### T7: launch
 

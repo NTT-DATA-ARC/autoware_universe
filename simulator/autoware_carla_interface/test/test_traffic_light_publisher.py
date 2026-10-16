@@ -264,3 +264,27 @@ def test_valid_params_pass(tmp_path):
 def test_invalid_params_are_rejected(map_path, distance, ratio, message):
     with pytest.raises(ValueError, match=message):
         tlp.validate_traffic_light_params(True, map_path, distance, ratio)
+
+
+@pytest.mark.parametrize("tls_manager", ["sumo", "carla"])
+def test_force_green_is_refused_with_sumo_synchronized_traffic_lights(tls_manager):
+    with pytest.raises(ValueError, match="force_green"):
+        tlp.validate_traffic_light_params(
+            False, "", 5.0, 0.6, force_green=True, use_sumo=True, tls_manager=tls_manager
+        )
+
+
+@pytest.mark.parametrize(
+    "use_sumo, tls_manager",
+    [(True, "none"), (False, "sumo"), (False, "carla"), (False, "none")],
+)
+def test_force_green_is_accepted_without_traffic_light_sync(use_sumo, tls_manager):
+    # tls_manager only matters with use_sumo; without SUMO the CARLA lights are alone.
+    tlp.validate_traffic_light_params(
+        True, "", 5.0, 0.6, force_green=True, use_sumo=use_sumo, tls_manager=tls_manager
+    )
+
+
+def test_sumo_tls_manager_is_fine_without_force_green():
+    # Publishing the SUMO-driven CARLA states is the main co-simulation use case.
+    tlp.validate_traffic_light_params(True, "", 5.0, 0.6, use_sumo=True, tls_manager="sumo")
