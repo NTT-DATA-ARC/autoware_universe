@@ -177,6 +177,12 @@ All the key parameters can be configured in `autoware_carla_interface.launch.xml
 | `use_light_weight_sensor_mapping` | bool   | False                                                                             | If True, uses `sensor_mapping_light_weight.yaml` instead of the default `sensor_mapping.yaml` to reduce simulator load. See [Sensor Mapping (CARLA-specific)](#2-sensor-mapping-carla-specific) for details.        |
 | `sensor_mapping_file`             | string | "$(find-pkg-share autoware_carla_interface)/config/sensor_mapping.yaml"           | Path to sensor mapping YAML configuration file. When `use_light_weight_sensor_mapping` is True, this defaults to `config/sensor_mapping_light_weight.yaml`.                                                         |
 | `config_file`                     | string | "$(find-pkg-share autoware_carla_interface)/raw_vehicle_cmd_converter.param.yaml" | Control mapping file to be used in `autoware_raw_vehicle_cmd_converter`. Current control are calibrated based on `vehicle.toyota.prius` Blueprints ID in CARLA. Changing the vehicle type may need a recalibration. |
+| `traffic_light.publish`           | bool   | False                                                                             | Publish the CARLA traffic-light states on `/perception/traffic_light_recognition/traffic_signals`. See [Publishing CARLA Traffic-Light States](#publishing-carla-traffic-light-states).                             |
+| `traffic_light.force_green`       | bool   | False                                                                             | Set every CARLA traffic light to green and freeze it at startup (un-frozen at shutdown).                                                                                                                            |
+| `traffic_light.map_path`          | string | ""                                                                                | Lanelet2 map (.osm) the CARLA traffic lights are matched to by position. Empty uses the OpenDRIVE signal id as the group id.                                                                                        |
+| `traffic_light.match_distance`    | double | 5.0                                                                               | Maximum head-to-head distance (m) accepted when matching a CARLA traffic light to a lanelet2 head.                                                                                                                  |
+| `traffic_light.match_ratio`       | double | 0.6                                                                               | Ambiguity threshold: a match is rejected when nearest > ratio * second-nearest (different signal). Lower is stricter.                                                                                               |
+| `traffic_light.id_map`            | string | ""                                                                                | Manual overrides `opendrive_id:group_id[\|group_id...],...`, taking precedence over position matching.                                                                                                              |
 
 ### Sensor Configuration
 
@@ -306,6 +312,93 @@ The maps provided by the Carla Simulator ([Carla Lanelet2 Maps](https://bitbucke
 
 - When using the TIER IV Vector Map Builder, you must convert the PCD format from `binary_compressed` to `ascii`. You can use `pcl_tools` for this conversion.
 - For reference, an example of Town01 with added traffic lights at one intersection can be downloaded [here](https://drive.google.com/drive/folders/1QFU0p3C8NW71sT5wwdnCKXoZFQJzXfTG?usp=sharing).
+- Alternatively, add CARLA's own traffic lights to the existing map with `tools/carla_tl_to_lanelet2.py` and bypass camera recognition, see [Publishing CARLA Traffic-Light States](#publishing-carla-traffic-light-states).
+
+### Publishing CARLA Traffic-Light States
+
+Instead of running camera-based recognition, the bridge can publish the CARLA server's
+traffic-light states directly. Setting `traffic_light.publish:=true` publishes an
+`autoware_perception_msgs/TrafficLightGroupArray` on
+`/perception/traffic_light_recognition/traffic_signals` every tick, stamped with the simulation
+time of the frame. Each CARLA light is reported as a circular signal whose color and status follow
+the CARLA state: `Red`/`Yellow`/`Green` map to `RED`/`AMBER`/`GREEN` with status `SOLID_ON`, the
+known-dark `Off` state maps to status `SOLID_OFF`, and only a state the bridge cannot interpret is
+published as `UNKNOWN`/`UNKNOWN`. With the SUMO co-simulation and `tls_manager:=sumo`, the CARLA
+lights follow SUMO, so the SUMO signal states reach Autoware the same way.
+
+Autoware keys traffic signals by `traffic_light_group_id`, the id of a `traffic_light`
+regulatory element in the lanelet2 map. The bridge resolves which group(s) each CARLA light
+belongs to once, on the first publishing tick, in order of precedence:
+
+1. **`traffic_light.id_map` override.** If the light's OpenDRIVE signal id appears in the
+   `opendrive_id:group_id[|group_id...],...` map, those group ids are used directly. A malformed
+   entry is skipped with a warning; the remaining entries still apply.
+2. **Position matching (`traffic_light.map_path`).** Each CARLA light head (the mean of
+   `get_light_boxes()`) is matched to the nearest map traffic-light head, and its state is
+   published under every regulatory element that references that head.
+3. **OpenDRIVE-id fallback.** With no map path, the OpenDRIVE signal id is used directly as the
+   group id (correct for maps generated with `tools/carla_tl_to_lanelet2.py`, see below).
+
+Position matching is conservative: if a head of a _different_ signal is nearly as close
+(`traffic_light.match_ratio`), exactly as close, or nothing is within
+`traffic_light.match_distance`, the light is left unpublished and logged as ambiguous / unmatched.
+Check the startup log for the report (`N matched, M ambiguous, K too far, L overridden`); it also
+warns when the map has no traffic-light heads at all. If several CARLA lights resolve to the same
+group id with different states, the most restrictive one is published
+(red > amber > unknown > off > green). No message is published when no light could be resolved.
+
+> Position matching reads the lanelet2 node `local_x`/`local_y` tags (the Autoware map frame) and
+> converts each CARLA head with `map = (carla_x, -carla_y)`, the same conversion as the GNSS pose.
+> Unlike upstream there is no `map_origin_x`/`map_origin_y` offset; it is not needed for the stock
+> CARLA towns (verified on Town01).
+
+`traffic_light.force_green:=true` sets every CARLA traffic light to green and freezes it at
+startup, so the ego can pass every signalized stop line (e.g. camera-less closed-loop runs). At
+shutdown the lights are un-frozen and each traffic-light group is reset, so the intersections
+resume a consistent cycle. It is refused at startup together with `use_sumo:=true` and
+`tls_manager:=sumo` or `carla`, where the lights are synchronized with SUMO.
+
+The parameters are validated at startup: a `traffic_light.map_path` that is not a file,
+`match_distance <= 0`, or `match_ratio` outside (0, 1] stops the bridge with an error.
+
+#### Adding traffic lights to the CARLA Lanelet2 maps
+
+`tools/carla_tl_to_lanelet2.py` reads the traffic lights of the loaded CARLA world and writes a
+copy of a lanelet2 map with, for every CARLA light:
+
+- a `traffic_light` linestring per light head (bottom edge of the head, tagged with its height),
+- a `stop_line` linestring across the lane at the CARLA stop position,
+- a `traffic_light` regulatory element (`refers` = heads, `ref_line` = stop line) whose id is the
+  OpenDRIVE signal id (plus `--group-id-offset`),
+- a reference to it on the lanelet that contains the stop position (the approach lanelet).
+
+```bash
+# CARLA running with Town01 loaded
+python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/Town01/lanelet2_map.osm
+# -> ~/autoware_map/Town01/lanelet2_map_with_tl.osm (the input map is not modified)
+```
+
+Keep the output in the same map directory (the CARLA map name is taken from the directory name).
+The tool stops with an error if an OpenDRIVE id collides with an existing lanelet2 id (use
+`--group-id-offset`) or if the map already has traffic-light regulatory elements.
+`--dump-json` / `--from-json` save and reuse the CARLA data, so the map can also be regenerated
+without CARLA.
+
+#### Running with Autoware
+
+```bash
+ros2 launch autoware_launch e2e_simulator.launch.xml simulator_type:=carla \
+  map_path:=$HOME/autoware_map/Town01 lanelet2_map_file:=lanelet2_map_with_tl.osm \
+  vehicle_model:=sample_vehicle sensor_model:=carla_sensor_kit \
+  traffic_light.publish:=true
+```
+
+In `e2e_simulator.launch.xml` (local change in `autoware_launch`), `traffic_light.map_path`
+defaults to the map Autoware loads (`map_path`/`lanelet2_map_file`), and
+`traffic_light.publish:=true` disables the camera-based traffic light recognition
+(`use_traffic_light_recognition:=false`) so that the bridge is the only publisher of the topic.
+`autoware_carla_interface.launch.xml` also skips the CAM_FRONT relays feeding that recognition.
+On Town01 the ego stops about 0.5 m before the stop line on red and starts on green.
 
 ## Tips
 
@@ -315,4 +408,5 @@ The maps provided by the Carla Simulator ([Carla Lanelet2 Maps](https://bitbucke
 ## Known Issues and Future Works
 
 - **Testing on procedural maps (Adv Digital Twin)**: Currently unable to test due to failures in creating the Adv Digital Twin map.
-- **Traffic light recognition**: The default CARLA Lanelet2 maps lack proper traffic light regulatory elements. See the "Traffic Light Recognition" section above for workarounds.
+- **Traffic light recognition**: The default CARLA Lanelet2 maps lack proper traffic light regulatory elements. See the "Traffic Light Recognition" section above for workarounds, or generate them with `tools/carla_tl_to_lanelet2.py` and bypass camera recognition with `traffic_light.publish` (see "Publishing CARLA Traffic-Light States").
+- **SUMO yellow lights**: With `tls_manager:=sumo`, a CARLA light mapped to SUMO links in different states (e.g. straight `G`, turn `y`) is forced to red, so Autoware may receive red while SUMO shows yellow or green for the straight link.

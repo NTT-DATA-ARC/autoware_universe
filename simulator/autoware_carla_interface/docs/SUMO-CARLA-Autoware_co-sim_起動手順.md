@@ -139,6 +139,9 @@ ros2 launch autoware_launch e2e_simulator.launch.xml \
 | `ego_spawn_front_margin` | EGOスポーン時に必要な前方車とのすき間 [m]。2.4.2参照 | `20.0` | `20.0` |
 | `ego_spawn_rear_margin` | EGOスポーン時に必要な後方車とのすき間 [m]。2.4.2参照 | `20.0` | `20.0` |
 | `ego_spawn_wait_timeout` | ウォームアップ後に空きを待つ上限秒数(整数)。2.4.2参照 | `60` | `60` |
+| `traffic_light.publish` | CARLAの信号状態をAutowareへ直接通知する(カメラの信号認識は起動しない)。2.7参照 | `true` | `false` |
+| `lanelet2_map_file` | Autowareが読み込むLanelet2地図のファイル名(`map_path`内)。信号を使うときは2.7.1で作った地図 | `lanelet2_map_with_tl.osm` | `lanelet2_map.osm` |
+| `traffic_light.force_green` | 起動時に全信号を緑にして固定する。2.7参照 | `true` | `false` |
 
 - `sumo_gui:=true`のsumo-guiは、起動後に自動でシミュレーションを開始する(`--start`)。Runボタンを押す必要はない。
   また、co-simの終了時にはダイアログを出さずに自動で閉じる(`--quit-on-end`)。
@@ -301,3 +304,79 @@ grep "MAIN_LOOP_PERIOD" /tmp/autoware_carla.log
 - 歩行者用のCARLA walkerブレンプリントは`sumo_integration/data/vtypes.json`の
   `carla_blueprints`に`walker.pedestrian.0001`〜`0051`(`vClass: "pedestrian"`)として
   登録済みであり、追加設定は不要。
+
+### 2.7 CARLAの信号状態をAutowareへ直接通知する
+
+CARLAが管理している信号の状態(赤・黄・青)を、カメラ画像による信号認識を使わずに、
+ブリッジ(`autoware_carla_interface`)から`/perception/traffic_light_recognition/traffic_signals`へ
+毎tick publishする機能。設計と確認結果は`docs/CARLA_Autoware_信号状態publish_実装計画_v1.0.md`を参照。
+`tls_manager:=sumo`のときは、SUMOが決めた信号状態がCARLA経由でそのままAutowareに届く。
+
+#### 2.7.1 信号入りのLanelet2地図を作る(最初に1回)
+
+標準のCARLA用Lanelet2地図(`~/autoware_map/Town01/lanelet2_map.osm`)には信号の情報がないため、
+そのままではAutowareが信号で止まらない。CARLAから信号を読み取って地図に追加するツールで、
+信号入りの地図を作る。
+
+```bash
+# CARLAサーバーを起動し、Town01を読み込んでおく(2.1・2.2)
+cd ~/autoware.1.9.0/src/universe/autoware_universe/simulator/autoware_carla_interface
+python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/Town01/lanelet2_map.osm
+```
+
+- 出力は`~/autoware_map/Town01/lanelet2_map_with_tl.osm`(元の地図は変更しない)。すでにある場合は`--force`で上書きする。
+- 信号ごとに、信号灯・停止線・信号のregulatory element(IDはOpenDRIVEの信号ID)を追加し、
+  交差点手前のlaneletに付ける。Town01では36信号すべてが追加される。
+- 出力は元の地図と同じフォルダに置く(CARLAの地図名は`map_path`のフォルダ名から決まるため、
+  別のフォルダにすると別の地図を読もうとする)。
+- `WARNING: ... not added`が出た信号は、停止位置に合うlaneletが見つからなかったもの。終了コードは2になる。
+
+#### 2.7.2 起動
+
+2.4.1の起動コマンドに、次の2行を追加する。
+
+```bash
+  lanelet2_map_file:=lanelet2_map_with_tl.osm \
+  traffic_light.publish:=true \
+```
+
+- `traffic_light.publish:=true`のときは、カメラによる信号認識(traffic_light_recognition)を起動しない。
+  同じトピックに2つのノードがpublishしないようにするため。
+- ブリッジは、Autowareが読み込む地図(`map_path`/`lanelet2_map_file`)を読み、CARLAの信号を
+  地図の信号に位置で対応付ける。
+
+起動ログで対応付けの結果を確認する。
+
+```bash
+grep -nE "Traffic-light matching|Traffic lights|traffic-light|force_green" /tmp/autoware_carla.log
+```
+
+| ログ                                                                                                      | 意味                                                                              |
+| --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `Traffic-light matching: 36 matched, 0 ambiguous, 0 too far, 0 overridden (map has 36 heads / 36 groups)` | 正常。CARLAの36信号すべてが地図の信号に対応付いた                                 |
+| `the map has no traffic-light heads; 36 CARLA lights not published`                                       | 地図に信号がない。`lanelet2_map_file:=lanelet2_map_with_tl.osm`を付け忘れている   |
+| `ambiguous CARLA light (opendrive_id=...)` / `unmatched CARLA light (...)`                                | その信号は対応付けできず、publishされない。下の`traffic_light.id_map`で指定できる |
+
+#### 2.7.3 オプション
+
+| オプション                     | 説明                                                                                                                                  | デフォルト値                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `traffic_light.publish`        | CARLAの信号状態をpublishする                                                                                                          | `false`                        |
+| `traffic_light.force_green`    | 起動時に全信号を緑にして固定し、終了時に元に戻す。`use_sumo:=true`で`tls_manager`が`sumo`/`carla`のときは指定できない(起動時にエラー) | `false`                        |
+| `traffic_light.map_path`       | 対応付けに使うLanelet2地図。空(`""`)にするとOpenDRIVEの信号IDをそのまま使う                                                           | `map_path`/`lanelet2_map_file` |
+| `traffic_light.match_distance` | 対応付けを認める信号灯どうしの最大距離 [m]                                                                                            | `5.0`                          |
+| `traffic_light.match_ratio`    | 曖昧と判定するしきい値(小さいほど厳しい)                                                                                              | `0.6`                          |
+| `traffic_light.id_map`         | 手動の対応付け`opendrive_id:group_id[\|group_id...],...`。位置の対応付けより優先する。`\|`を含むので引用符で囲む                      | `""`                           |
+
+- 状態の対応: CARLAのRed/Yellow/Green → RED/AMBER/GREEN(点灯)、Off → 消灯、それ以外 → UNKNOWN。
+- 同じ信号IDに複数のCARLAの信号が対応して状態が違うときは、最も制限の強い状態(赤 > 黄 > 不明 > 消灯 > 青)を出す。
+
+#### 2.7.4 注意点
+
+- **SUMO連携(`tls_manager:=sumo`)では、黄信号もAutowareには赤として届くことがある。**
+  1つのCARLAの信号に、状態の違うSUMOの複数のリンク(例: 直進は`G`、右左折は`y`)が対応している場合、
+  CARLAの信号は赤になる(既存のSUMO連携の仕様。ログに`Different SUMO traffic-light states ... CARLA state is forced to red.`が出る)。
+- RMWは`~/.bashrc`と同じ`RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`で起動すること。Fast DDSで起動したときは
+  ノードどうしの通信が一部できず、Autoを押せる状態にならなかった。
+- 確認済みの地図はTown01だけ。Town10HDなど別の地図では、2.7.1のツールが既存のIDとぶつかって止まることがある。
+  その場合は`--group-id-offset`(例: `--group-id-offset 100000`)を付け、2.7.2の位置の対応付け(既定)で使う。

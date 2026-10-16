@@ -87,7 +87,7 @@ Autowareへ直接通知する。
 | T7  | launchの引数追加、カメラ認識の停止                                                | `autoware_carla_interface.launch.xml`、`e2e_simulator.launch.xml`(autoware_launch)                                       | ✅ 完了(autoware_launchは未コミット) |
 | T8  | 単体テスト                                                                        | `test/test_traffic_light_matcher.py`(upstreamから移植)、`test/test_traffic_light_publisher.py`、`test/conftest.py`(新規) | ✅ 完了                              |
 | T9  | 実機での確認                                                                      | –                                                                                                                        | ✅ 完了(Town01)                      |
-| T10 | ドキュメント(起動手順書、README)                                                  | `docs/`、`README.md`                                                                                                     | 未着手                               |
+| T10 | ドキュメント(起動手順書、README)                                                  | `docs/SUMO-CARLA-Autoware_co-sim_起動手順.md`(2.4.1・2.7)、`README.md`                                                   | ✅ 完了                              |
 
 進める順番: T0 → T1 → T3+T8 → T4/T5 → T6 → T2 → T7 → T9 → T10
 
@@ -452,3 +452,18 @@ ros2 launch autoware_launch e2e_simulator.launch.xml simulator_type:=carla \
 
 - 起動手順書(2.4.1のオプション一覧)に新しい引数を追加する。
 - READMEに、地図の作り方と使い方を追記する。
+
+#### 結果(T10)
+
+- `docs/SUMO-CARLA-Autoware_co-sim_起動手順.md`
+  - 2.4.1のオプション一覧に `traffic_light.publish`・`lanelet2_map_file`・`traffic_light.force_green` を追加した。
+  - 2.7(新規)に、信号入りの地図の作り方(2.7.1)、起動とログの確認(2.7.2)、オプション(2.7.3)、
+    注意点(2.7.4: SUMOの黄が赤で届くこと、CycloneDDS、Town01以外の地図)を書いた。
+  - この手順書は既存部分がmarkdownlintの指摘(H1が複数など)を含むため、追加部分だけを整形し、
+    既存部分は変更していない。
+- `README.md`(英語)
+  - パラメータ表に `traffic_light.*` の6つを追加した。
+  - 「Publishing CARLA Traffic-Light States」の節を追加した(upstreamの説明をもとに、本実装との違い
+    (`map_origin_x/y` なし、食い違うときは最も制限の強い状態、起動時のチェック、`force_green` と
+    SUMOの同時指定の禁止、終了時の `reset_group()`)を反映)。地図ツールの使い方と、Autoware全体での起動方法も書いた。
+  - Known Issuesに、地図ツールで信号を追加できることと、SUMOの黄が赤で届く件を追記した。
