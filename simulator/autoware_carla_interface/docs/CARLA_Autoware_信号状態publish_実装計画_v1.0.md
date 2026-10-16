@@ -86,7 +86,7 @@ Autowareへ直接通知する。
 | T6  | `force_green` と排他チェック、終了時の解除                                        | `carla_autoware.py`                                                                                                      | ✅ 完了                              |
 | T7  | launchの引数追加、カメラ認識の停止                                                | `autoware_carla_interface.launch.xml`、`e2e_simulator.launch.xml`(autoware_launch)                                       | ✅ 完了(autoware_launchは未コミット) |
 | T8  | 単体テスト                                                                        | `test/test_traffic_light_matcher.py`(upstreamから移植)、`test/test_traffic_light_publisher.py`、`test/conftest.py`(新規) | ✅ 完了                              |
-| T9  | 実機での確認                                                                      | –                                                                                                                        | 未着手                               |
+| T9  | 実機での確認                                                                      | –                                                                                                                        | ✅ 完了(Town01)                      |
 | T10 | ドキュメント(起動手順書、README)                                                  | `docs/`、`README.md`                                                                                                     | 未着手                               |
 
 進める順番: T0 → T1 → T3+T8 → T4/T5 → T6 → T2 → T7 → T9 → T10
@@ -411,6 +411,42 @@ Autoware全体を起動したときの確認(カメラの信号認識が起動�
 3. Town01で、赤信号の停止線でEGOが止まり、青で発進する
 4. `tls_manager=sumo` で、SUMOの信号とトピックが一致する
 5. `force_green` で全信号が緑のまま変わらない
+
+#### 結果(T9、2026-10-16、CARLA 0.9.15、Town01、Autoware全体)
+
+起動コマンド(RVizなし。目的地の設定とAutoはAD APIから行った):
+
+```bash
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp  # ~/.bashrc と同じ。Fast DDSでは下記の問題が出た
+ros2 launch autoware_launch e2e_simulator.launch.xml simulator_type:=carla \
+  map_path:=$HOME/autoware_map/Town01 lanelet2_map_file:=lanelet2_map_with_tl.osm \
+  vehicle_model:=sample_vehicle sensor_model:=carla_sensor_kit \
+  traffic_light.publish:=true spawn_point:="256.41,1.97,0.3,0.0,0.0,0.0"
+```
+
+シナリオ: 信号360(OpenDRIVE ID)の停止線(CARLA x=316.41)の60 m手前にスポーンし、交差点を
+直進した先(map (366.41, -2.01))を目的地にする。CARLAの信号360の周期は青10秒・黄3秒・赤2秒で、
+同じまとまりの3信号で回るので、赤は約26秒続く。
+
+| #   | 確認                               | 結果                                                                                                                                                                                                                                                                                     |
+| --- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | トピックのpublisher                | `/perception/traffic_light_recognition/traffic_signals` のpublisherはブリッジだけ(1つ)。カメラの信号認識のノードは0個。起動ログは「36 matched」                                                                                                                                          |
+| 2   | 状態の追従                         | T4で確認済み(CARLAの状態と315回中314回一致)                                                                                                                                                                                                                                              |
+| 3   | 赤で止まり、青で発進する           | 赤の間、behavior_velocity_plannerの停止理由 `traffic-signal` が出て減速し、後輪軸 x=312.12 で停止(前端 ≈ 315.91、停止線の0.50 m手前。`stop_margin` は0.0)。約16秒(シミュレーション時間)停止し、青になると停止理由が消えて発進。目的地に到着(ARRIVED)。赤の間に停止位置を越えたことはない |
+| 4   | `use_sumo:=true tls_manager:=sumo` | 36 matched。信号360の青は25.4秒以上続き(CARLAの青は10秒)、SUMOの周期で変わることを確認。今回は青の間に交差点に着いたので停止はなかった。目的地に到着                                                                                                                                     |
+| 5   | `traffic_light.force_green:=true`  | 信号360は常にGREEN。停止理由 `traffic-signal` は一度も出ず、交差点を4.3 m/sのまま通過して到着。終了時に36信号のfreezeを解除・12グループをreset                                                                                                                                           |
+
+- 確認4で分かったこと(既存のSUMO連携の仕様。今回の範囲外): 1つのCARLAの信号(landmark)に、
+  SUMOの複数のリンクが対応していて状態が違う場合(例 `['G', 'y']`、`['G', 'r']`)は、CARLAは赤に
+  なる(`BridgeHelper.get_carla_traffic_light_state()`)。このため、SUMOの黄の間や、右左折の
+  リンクだけが赤の間も、Autowareには赤が届く(安全側)。黄は観測されなかった。
+- 試験の手順で分かったこと(今回の実装とは関係しない):
+  - `RMW_IMPLEMENTATION` を設定せずにFast DDSで起動すると、ノードどうしの発見が一部しかできず
+    (ブリッジや `/clock` が見えない)、診断がERROR・STALEだらけになってAutoを押せなかった。
+    `~/.bashrc` と同じCycloneDDSにすると正常に動いた。
+  - 画面のない環境ではRVizが起動に失敗し、再起動を繰り返して負荷が上がる。その場合は `rviz:=false`。
+  - 起動直後の目的地の設定が「The route is already set.」で失敗することがあった(経路の状態は
+    UNSET)。`/api/routing/clear_route` の後にもう一度設定すると成功した。
 
 ### T10: ドキュメント
 
