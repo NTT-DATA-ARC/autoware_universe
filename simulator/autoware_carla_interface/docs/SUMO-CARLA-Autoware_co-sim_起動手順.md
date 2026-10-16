@@ -103,12 +103,14 @@ export ROS_DOMAIN_ID=33
 ros2 launch autoware_launch e2e_simulator.launch.xml \
   simulator_type:=carla \
   map_path:=$HOME/autoware_map/Town01 \
+  lanelet2_map_file:=lanelet2_map_with_tl.osm \
   vehicle_model:=sample_vehicle \
   sensor_model:=carla_sensor_kit \
   use_sumo:=true \
   sumo_gui:=true \
   sumo_cfg_file:=/home/divp/CARLA/Co-Simulation/Sumo/examples/Town01.sumocfg \
   tls_manager:=sumo \
+  traffic_light.publish:=true \
   sync_vehicle_lights:=true \
   sync_vehicle_color:=true \
   sumo_warmup_time:=600 \
@@ -150,6 +152,8 @@ ros2 launch autoware_launch e2e_simulator.launch.xml \
   公開されていないため、細かく調整したい場合はこの引数は使わず`ros2 run
   autoware_carla_interface spectator_follow --distance ... --height ...`のように別ターミナルで
   手動起動すること。
+- `lanelet2_map_file`・`traffic_light.publish`の2行は、CARLAの信号状態をAutowareへ直接通知する設定(2.7参照)。
+  2.7.1の信号入りの地図(`lanelet2_map_with_tl.osm`)を先に作っておくこと。使わない場合はこの2行を省く(カメラによる信号認識になる)。
 - ウォームアップを使わない場合は、`sumo_warmup_time`と`spawn_point`の行を省く(EGOは起動直後にランダムな位置へスポーンされる)。
   `spawn_point`だけを指定すれば、ウォームアップなしで固定位置にスポーンする。
 - `2>&1 | tee -i /tmp/autoware_carla.log`はログ保存用(2.4.4のgrepで使う)。不要なら省いてよい。
@@ -333,7 +337,7 @@ python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/Town01/lanelet2_map.osm
 
 #### 2.7.2 起動
 
-2.4.1の起動コマンドに、次の2行を追加する。
+2.4.1の起動コマンド例の次の2行で有効になる。
 
 ```bash
   lanelet2_map_file:=lanelet2_map_with_tl.osm \
