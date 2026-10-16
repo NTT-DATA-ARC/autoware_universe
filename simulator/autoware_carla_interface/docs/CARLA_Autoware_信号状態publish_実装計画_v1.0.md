@@ -18,25 +18,25 @@ Autowareへ直接通知する。
 - 周期: 毎tick
 - 信号の内容: 1つのCARLA信号を、形がCIRCLEの信号1つとして出す
 
-| CARLAの状態 | color | status |
-|---|---|---|
-| Red | RED | SOLID_ON |
-| Yellow | AMBER | SOLID_ON |
-| Green | GREEN | SOLID_ON |
-| Off | (UNKNOWN) | SOLID_OFF |
-| 上記以外(Unknown など) | UNKNOWN | UNKNOWN |
+| CARLAの状態            | color     | status    |
+| ---------------------- | --------- | --------- |
+| Red                    | RED       | SOLID_ON  |
+| Yellow                 | AMBER     | SOLID_ON  |
+| Green                  | GREEN     | SOLID_ON  |
+| Off                    | (UNKNOWN) | SOLID_OFF |
+| 上記以外(Unknown など) | UNKNOWN   | UNKNOWN   |
 
 ### 0.1 パラメータ(公式ドキュメントに合わせる)
 
-| パラメータ | 既定値 | 内容 |
-|---|---|---|
-| `traffic_light.publish` | `False` | CARLAの信号状態をpublishする |
-| `traffic_light.force_green` | `False` | 起動時に全信号を緑にしてfreezeする |
-| `traffic_light.map_path` | `""` | 位置マッチングに使うLanelet2の `.osm` のパス |
-| `traffic_light.match_distance` | `5.0` | マッチを認める信号灯どうしの最大距離 [m] |
-| `traffic_light.match_ratio` | `0.6` | 曖昧と判定するしきい値(小さいほど厳しい) |
-| `traffic_light.id_map` | `""` | 手動での対応付け `opendrive_id:group_id[\|group_id...]`。マッチングより優先する |
-| `map_origin_x` / `map_origin_y` | `0.0` | CARLAの原点からAutowareの地図原点までのずれ。位置マッチングでも使う |
+| パラメータ                      | 既定値  | 内容                                                                            |
+| ------------------------------- | ------- | ------------------------------------------------------------------------------- |
+| `traffic_light.publish`         | `False` | CARLAの信号状態をpublishする                                                    |
+| `traffic_light.force_green`     | `False` | 起動時に全信号を緑にしてfreezeする                                              |
+| `traffic_light.map_path`        | `""`    | 位置マッチングに使うLanelet2の `.osm` のパス                                    |
+| `traffic_light.match_distance`  | `5.0`   | マッチを認める信号灯どうしの最大距離 [m]                                        |
+| `traffic_light.match_ratio`     | `0.6`   | 曖昧と判定するしきい値(小さいほど厳しい)                                        |
+| `traffic_light.id_map`          | `""`    | 手動での対応付け `opendrive_id:group_id[\|group_id...]`。マッチングより優先する |
+| `map_origin_x` / `map_origin_y` | `0.0`   | CARLAの原点からAutowareの地図原点までのずれ。位置マッチングでも使う             |
 
 ### 0.2 グループIDの決め方(優先順)
 
@@ -75,19 +75,19 @@ Autowareへ直接通知する。
 
 ## 2. タスク一覧
 
-| # | タスク | 主な変更先 | 状態 |
-|---|---|---|---|
-| T0 | ブランチ作成と計画書の保存 | `docs/` | ✅ 完了 |
-| T1 | 座標系の確認(CARLAの座標、`pose()` の `map` 座標、osmの `local_x/local_y` の関係) | 調査のみ | ✅ 完了(Town01) |
-| T2 | 地図に信号を追加するツール | `tools/carla_tl_to_lanelet2.py`(新規) | 未着手 |
-| T3 | 信号publishのロジック(ROSに依存しない部分) | `modules/traffic_light_publisher.py`(新規) | 未着手 |
-| T4 | ROSパラメータとpublisherの追加 | `carla_ros.py` | 未着手 |
-| T5 | 毎tickのpublish | `carla_autoware.py` | 未着手 |
-| T6 | `force_green` と排他チェック、終了時の解除 | `carla_autoware.py` | 未着手 |
-| T7 | launchの引数追加、カメラ認識の停止 | 両方のlaunch | 未着手 |
-| T8 | 単体テスト | `test/traffic_light_publisher_test.py`(新規) | 未着手 |
-| T9 | 実機での確認 | – | 未着手 |
-| T10 | ドキュメント(起動手順書、README) | `docs/`、`README.md` | 未着手 |
+| #   | タスク                                                                            | 主な変更先                                                                                                               | 状態            |
+| --- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------- |
+| T0  | ブランチ作成と計画書の保存                                                        | `docs/`                                                                                                                  | ✅ 完了         |
+| T1  | 座標系の確認(CARLAの座標、`pose()` の `map` 座標、osmの `local_x/local_y` の関係) | 調査のみ                                                                                                                 | ✅ 完了(Town01) |
+| T2  | 地図に信号を追加するツール                                                        | `tools/carla_tl_to_lanelet2.py`(新規)                                                                                    | 未着手          |
+| T3  | 信号publishのロジック(ROSに依存しない部分)                                        | `modules/traffic_light_matcher.py`(upstreamから移植)、`modules/traffic_light_publisher.py`(新規)                         | ✅ 完了         |
+| T4  | ROSパラメータとpublisherの追加                                                    | `carla_ros.py`                                                                                                           | 未着手          |
+| T5  | 毎tickのpublish                                                                   | `carla_autoware.py`                                                                                                      | 未着手          |
+| T6  | `force_green` と排他チェック、終了時の解除                                        | `carla_autoware.py`                                                                                                      | 未着手          |
+| T7  | launchの引数追加、カメラ認識の停止                                                | 両方のlaunch                                                                                                             | 未着手          |
+| T8  | 単体テスト                                                                        | `test/test_traffic_light_matcher.py`(upstreamから移植)、`test/test_traffic_light_publisher.py`、`test/conftest.py`(新規) | ✅ 完了         |
+| T9  | 実機での確認                                                                      | –                                                                                                                        | 未着手          |
+| T10 | ドキュメント(起動手順書、README)                                                  | `docs/`、`README.md`                                                                                                     | 未着手          |
 
 進める順番: T0 → T1 → T3+T8 → T4/T5 → T6 → T2 → T7 → T9 → T10
 
@@ -145,6 +145,40 @@ ROSとCARLAに依存しない部分を、単体テストできるように分け
 - osmを読み、信号灯(`traffic_light` linestring)とregulatory elementの対応表を作る
 - 位置マッチング(`match_distance`・`match_ratio`、同じ距離の場合の扱い)
 - グループIDの決め方(0.2の優先順)と、起動時のログ(マッチ・曖昧・遠すぎの件数)
+
+#### 結果(T3)
+
+- **upstreamに同じ機能がすでにあった。** autowarefoundation/autoware_universe の main
+  (commit `8c41273b3`、#13327「publish CARLA traffic-light states, matched to the map by
+  position」)。公式ドキュメントの説明はこの実装に対応する。
+- 位置マッチングと `id_map` の解析は、upstreamの `modules/traffic_light_matcher.py` を
+  **変更せずに移植**した(将来upstreamに追従しやすくするため)。テスト
+  `test/test_traffic_light_matcher.py` も同様。
+- upstreamでは `carla_ros.py` の中にある次の処理を、ROSにもCARLAにも依存しない
+  `modules/traffic_light_publisher.py` に分け、単体テストできるようにした。
+  - `carla_state_to_element()`: CARLAの状態(または状態名)→ `(color, status)`
+  - `carla_head_map_point()`: 信号灯の箱の中心の平均 → 地図座標(`x + origin_x`、`-y + origin_y`)
+  - `resolve_traffic_light_groups()`: グループIDの決め方(`id_map` → 位置マッチング → OpenDRIVE ID)
+  - `resolution_report()`: 起動時ログの文面(マッチ・曖昧・遠すぎ・上書きの件数と警告)
+  - `build_group_states()`: グループIDごとにまとめた状態(ID順)
+- **upstreamとの違い**
+  - 同じグループIDに複数のCARLA信号が対応し、状態が食い違う場合: upstreamは後から処理した
+    信号の状態になる(actorの順番しだい)。本実装は**最も制限の強い状態**を出す
+    (赤 > 黄 > 不明 > 消灯 > 青)。
+  - 地図に信号灯が1つもない場合(標準のTown01など)、起動時ログで警告する。
+  - `TrafficLightElement` の定数は、ROSなしでimportできるようにモジュール内に持つ。
+    ROS環境ではテストでメッセージ定義と一致することを確かめる。
+- 実データでの確認(T1で取得したTown01の36信号): 地図なしでは36信号すべてがOpenDRIVE IDで
+  publish対象になる。現在のTown01の地図を指定すると、0件マッチと警告になる(想定どおり。T2が必要)。
+
+#### 結果(T8)
+
+- テストの実行方法(ROSなしでも、ROSをsourceした環境でも動く):
+  `python3 -m pytest test/test_traffic_light_matcher.py test/test_traffic_light_publisher.py`
+- `test/conftest.py`: `modules/__init__.py` がROSをimportするため、ROSがない環境では
+  パッケージの `__init__.py` を実行せずに純粋なモジュールだけを読み込む。
+- 結果: ROSなしで41件成功・1件スキップ(メッセージ定義との照合)。ROSをsourceした環境で
+  42件すべて成功。
 
 ### T4: ROSパラメータとpublisher
 
