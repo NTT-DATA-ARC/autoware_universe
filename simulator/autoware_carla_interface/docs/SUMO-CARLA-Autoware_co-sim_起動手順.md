@@ -369,8 +369,8 @@ python3 tools/check_sumo_lanelet2_tl_ids.py ~/CARLA/Co-Simulation/Sumo/examples/
 
 ```bash
 # 地図はTown01と同じ配布元(CARLA autoware-contents の vector_maps/lanelet2/Town05.osm)を
-# ~/autoware_map/Town05/lanelet2_map.osm に置く。点群は ~/CARLA/HDMaps/Town05.pcd を pointcloud_map.pcd に、
-# map_projector_info.yaml は「projector_type: Local」。
+# ~/autoware_map/Town05/lanelet2_map.osm に置く。点群も同じ配布元の point_cloud_maps/Town05.pcd(y軸反転版)を
+# pointcloud_map.pcd に置く。map_projector_info.yaml は「projector_type: Local」。
 # CARLAサーバーでTown05を読み込んでおく(2.2の--mapをTown05にする)。2回目からは--dump-jsonの代わりに--from-json。
 python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/Town05/lanelet2_map.osm \
     --dump-json ~/autoware_map/Town05/carla_tl.json --stop-line-forward-offset 0 --group-id-offset 100000
@@ -387,6 +387,12 @@ python3 tools/check_sumo_lanelet2_tl_ids.py ~/CARLA/Co-Simulation/Sumo/examples/
 - `--stop-line-forward-offset 0`: Town05では、CARLAの停止位置がもともと交差点の入口の1.3〜8.1 m手前(中央値6.8 m、
   CARLAの道路で測った値)にあり、Town01で6 m前に出した後と同じくらいなので、前に出さない。
   laneletがTown01より手前で終わるため、1 mでも`WARNING: ... not added`が出る(2395。3 mで4か所、6 mで45か所)。
+- 点群に`~/CARLA/HDMaps/Town05.pcd`を使ってはいけない。CARLAの座標のまま(y軸が反転していない)なので、
+  NDTの自己位置がずれ、RVizでEGOが車線をまたいで表示される(2026-10-19に発生)。Town01の`pointcloud_map.pcd`も配布元の版。
+- 信号の手前に向かうスポーン地点: 信号2408の手前(SUMOの`-16.0.00`、ルートの17台が通る)
+  `spawn_point:="24.71,-51.03,0.30,0.0,0.0,91.5"`。手前の交差点から26 m、CARLAの停止位置まで31 m。
+  Town05は交差点の間隔が短く(約60 m)、前後とも30 m以上取れる直線のスポーン地点はない。
+  `rou/Town05.rou.xml`は0〜199秒に計200台なので、`sumo_warmup_time`は`60`程度にする(600だと車がいなくなる)。
 - 実機(2.7.2)での確認はまだ。
 
 #### 2.7.2 起動

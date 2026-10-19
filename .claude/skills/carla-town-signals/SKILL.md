@@ -42,6 +42,9 @@ python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/<Town>/lanelet2_map.osm \
 
 信号の数を確認する(Town01は36個、landmark 360〜395)。
 
+地図がまだないTownは、Town01と同じ配布元(CARLA autoware-contents)の`vector_maps/lanelet2/<Town>.osm`と`point_cloud_maps/<Town>.pcd`(y軸反転版)を使う。
+`~/CARLA/HDMaps/<Town>.pcd`はCARLAの座標のままなので使わない(NDTの自己位置がずれ、RVizでEGOが車線をまたぐ)。
+
 ### 2. SUMOのnetに信号を置く
 
 ```bash
@@ -104,6 +107,8 @@ grep -nE "Traffic-light matching|Traffic lights|traffic-light|Different SUMO" /t
 - `Traffic-light matching: N matched, 0 ambiguous, 0 too far`のNが信号の数と同じであること。
 - `Different SUMO traffic-light states`が、手順4で`INFO`の出た信号でだけ出ていること。
 - 信号の手前に向かうスポーン地点(手順書2.4.3の表の「信号372の手前」と同じ選び方)から走らせて、次を確かめる。
+  スポーン地点は、信号の停止位置まで(`next`)だけでなく、手前の交差点から(`previous`)も直線で離れていることを確かめる。
+  交差点を出た直後の地点は避ける(Town05で一度選んでしまった)。
   - 赤で停止線に止まるか(止まった位置と、交差点の入口までの距離)。
   - 青で発進するか。
   - 必要なら、SUMO側の手順書「信号機定点カメラ」(`dbg_mon_tls.py --id <landmark>`)で、CARLAの信号の色も見る。
