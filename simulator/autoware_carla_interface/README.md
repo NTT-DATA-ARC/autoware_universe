@@ -391,6 +391,11 @@ The tool stops with an error if an OpenDRIVE id collides with an existing lanele
 `--dump-json` / `--from-json` save and reuse the CARLA data, so the map can also be regenerated
 without CARLA.
 
+For SUMO co-simulation, `tools/check_sumo_lanelet2_tl_ids.py NET.net.xml MAP_with_tl.osm` checks
+that the SUMO net (`linkSignalID` params) and the generated map refer to the same CARLA lights.
+The whole procedure for another town is in the Claude Code skill
+`.claude/skills/carla-town-signals/SKILL.md` (repository root).
+
 #### Running with Autoware
 
 ```bash

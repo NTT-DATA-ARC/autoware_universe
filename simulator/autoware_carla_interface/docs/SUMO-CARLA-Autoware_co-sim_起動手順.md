@@ -350,6 +350,20 @@ python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/Town01/lanelet2_map.osm --s
   別のフォルダにすると別の地図を読もうとする)。
 - `WARNING: ... not added`が出た信号は、停止位置に合うlaneletが見つからなかったもの、または前に出した停止線がlaneletの外に出たもの。終了コードは2になる。
 
+SUMOのnetと作った地図が、同じCARLAの信号(OpenDRIVEのlandmark ID)を指しているかを確かめる。
+`--carla-json`は、`carla_tl_to_lanelet2.py`の`--dump-json`で保存したCARLAの信号(省略できる)。
+
+```bash
+python3 tools/check_sumo_lanelet2_tl_ids.py ~/CARLA/Co-Simulation/Sumo/examples/net/Town01.net.xml \
+    ~/autoware_map/Town01/lanelet2_map_with_tl.osm --carla-json ~/autoware_map/Town01/carla_tl.json --report-mixed
+```
+
+- 最後に`OK`(終了コード0)が出れば、CARLAの全信号がSUMOと地図の両方にある。ずれがあると`NG ...`と、そのIDが出る。
+- `--report-mixed`の`INFO ... -> CARLA shows red`は、SUMOの状態の違うリンクが対応していて、CARLAで赤に置き換えられる信号(2.7.4)。
+  Town01では360と374。
+- Town01以外のTownで、SUMOとLanelet2の両方に信号を置く手順(停止線をずらす量の決め方、交通量の見直し、記録まで)は、
+  Claude Codeのスキル`/carla-town-signals`(`.claude/skills/carla-town-signals/SKILL.md`)にまとめてある。
+
 #### 2.7.2 起動
 
 2.4.1の起動コマンド例の次の2行で有効になる。
