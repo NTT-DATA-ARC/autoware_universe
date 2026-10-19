@@ -325,6 +325,7 @@ CARLAが管理している信号の状態(赤・黄・青)を、カメラ画像�
 `tls_manager:=sumo`のときは、SUMOが決めた信号状態がCARLA経由でそのままAutowareに届く。
 Town01のSUMOのnet(`~/CARLA/Co-Simulation/Sumo/examples/net/Town01.net.xml`)には、CARLAの信号36個すべてに対応する信号がある
 (設置方法と信号パターンは`~/CARLA/Co-Simulation/Sumo/docs/SUMO-CARLA_co-sim_起動手順.md`の「SUMOの信号(Town01)」を参照)。
+Town05のnetにも、CARLAの信号54個すべてに対応する信号がある(同「SUMOの信号(Town05)」、地図は2.7.1の「Town05」)。
 
 #### 2.7.1 信号入りのLanelet2地図を作る(最初に1回)
 
@@ -363,6 +364,30 @@ python3 tools/check_sumo_lanelet2_tl_ids.py ~/CARLA/Co-Simulation/Sumo/examples/
   Town01では360と374。
 - Town01以外のTownで、SUMOとLanelet2の両方に信号を置く手順(停止線をずらす量の決め方、交通量の見直し、記録まで)は、
   Claude Codeのスキル`/carla-town-signals`(`.claude/skills/carla-town-signals/SKILL.md`)にまとめてある。
+
+**Town05**(2026-10-19に作成):
+
+```bash
+# 地図はTown01と同じ配布元(CARLA autoware-contents の vector_maps/lanelet2/Town05.osm)を
+# ~/autoware_map/Town05/lanelet2_map.osm に置く。点群は ~/CARLA/HDMaps/Town05.pcd を pointcloud_map.pcd に、
+# map_projector_info.yaml は「projector_type: Local」。
+# CARLAサーバーでTown05を読み込んでおく(2.2の--mapをTown05にする)。2回目からは--dump-jsonの代わりに--from-json。
+python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/Town05/lanelet2_map.osm \
+    --dump-json ~/autoware_map/Town05/carla_tl.json --stop-line-forward-offset 0 --group-id-offset 100000
+python3 tools/check_sumo_lanelet2_tl_ids.py ~/CARLA/Co-Simulation/Sumo/examples/net/Town05.net.xml \
+    ~/autoware_map/Town05/lanelet2_map_with_tl.osm --carla-json ~/autoware_map/Town05/carla_tl.json \
+    --report-mixed --group-id-offset 100000
+```
+
+- 信号は54個(landmark 2376〜2434)。多車線のため、停止位置ごとに1つ、計111個のregulatory elementができる。
+  OpenDRIVEのID(+100000)を持つのは各信号の最初の1つだけなので、2.7.2の位置の対応付け(既定)で使う。
+  照合ツールは、同じ信号灯を共有するregulatory elementを1つの信号として数える
+  (`Lanelet2: 54 traffic lights in 111 regulatory elements`)。結果は`OK`、`INFO`(赤に置き換えられる信号)はなし。
+- `--group-id-offset 100000`: 付けないと、地図の既存のID(2376など)とぶつかって止まる。
+- `--stop-line-forward-offset 0`: Town05では、CARLAの停止位置がもともと交差点の入口の1.3〜8.1 m手前(中央値6.8 m、
+  CARLAの道路で測った値)にあり、Town01で6 m前に出した後と同じくらいなので、前に出さない。
+  laneletがTown01より手前で終わるため、1 mでも`WARNING: ... not added`が出る(2395。3 mで4か所、6 mで45か所)。
+- 実機(2.7.2)での確認はまだ。
 
 #### 2.7.2 起動
 
@@ -412,5 +437,5 @@ grep -nE "Traffic-light matching|Traffic lights|traffic-light|force_green" /tmp/
   Town01で起きるのは、信号パターンを手で設定した信号360と374だけ。後から設置した30個の信号は、対応するリンクが常に同じ色になる。
 - RMWは`~/.bashrc`と同じ`RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`で起動すること。Fast DDSで起動したときは
   ノードどうしの通信が一部できず、Autoを押せる状態にならなかった。
-- 確認済みの地図はTown01だけ。Town10HDなど別の地図では、2.7.1のツールが既存のIDとぶつかって止まることがある。
+- 実機で確認済みの地図はTown01だけ(Town05は地図と照合まで)。Town10HDなど別の地図では、2.7.1のツールが既存のIDとぶつかって止まることがある。
   その場合は`--group-id-offset`(例: `--group-id-offset 100000`)を付け、2.7.2の位置の対応付け(既定)で使う。

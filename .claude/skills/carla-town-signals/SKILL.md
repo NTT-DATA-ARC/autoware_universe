@@ -56,7 +56,7 @@ SUMO_HOME=$(python3 -c 'import sumo; print(sumo.SUMO_HOME)') python3 util/add_ca
 - `netconvert_carla.py`でxodrから参照netを作り、「どのSUMOリンクがどのlandmarkか」を取り出す。それを編集済みのnet(netedit で加えた横断歩道など)に適用する。
 - 対象は、信号のない`priority`の交差点だけ。既存の信号は変えない。作り直したいときは、その交差点の信号を先に消す。
 - 信号パターン: 進入路を、向かい合う2本(進む向きの差が135度より大きい)の組と、それ以外の1本の組に分け、組ごとに青42秒→黄3秒を順に回す(直進のある組が先)。T字路は主道路→従道路、十字路は一方の道路→交差する道路になる。2本の組の左折・Uターンは`g`、1本の組は全部`G`。1つのlandmarkのリンクは常に同じ色(`G`/`g`は同じ青)。
-- T字路・十字路のどちらも扱える(2026-10-19に`build_programs`を拡張。Town01の出力は拡張の前と同じ)。Town04(12交差点・43信号)とTown05(15交差点・54信号)で最後まで通り、`--report-mixed`で`INFO`が出ないことを確かめた。ただし`examples/net`のTown04・Town05にはまだ置いていない。止まるのは、1つのlandmarkが複数の進入路にまたがるとき(`controls several approaches`)と、1本の進入路に向かい合う進入路が2本以上あるとき(`several opposite approaches`)。そのときは`approach_groups`を見直す。ツールを変えたら、同じ条件(1つのlandmarkのリンクは常に同じ色)を守り、SUMO側の手順書を更新する。
+- T字路・十字路のどちらも扱える(2026-10-19に`build_programs`を拡張。Town01の出力は拡張の前と同じ)。Town04(12交差点・43信号)とTown05(15交差点・54信号)で最後まで通り、`--report-mixed`で`INFO`が出ないことを確かめた。`examples/net`のTown05には2026-10-19に置いた(Town04はまだ)。止まるのは、1つのlandmarkが複数の進入路にまたがるとき(`controls several approaches`)と、1本の進入路に向かい合う進入路が2本以上あるとき(`several opposite approaches`)。そのときは`approach_groups`を見直す。ツールを変えたら、同じ条件(1つのlandmarkのリンクは常に同じ色)を守り、SUMO側の手順書を更新する。
 - `SUMO_HOME`が空だと、`netconvert_carla.py`が終了コード1で失敗する(pipのeclipse-sumoなので、上のように`sumo.SUMO_HOME`を渡す)。
 - edgeのIDの付け方が違うと対応付けが0件になる(`--edge-suffix`、既定`.0.00`)。`No junctions to signalize.`が出たら、まずこれを疑う。
 
@@ -73,6 +73,10 @@ python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/<Town>/lanelet2_map.osm \
   1. まず`0`で作り、`WARNING`がないことを確かめる。
   2. 値を上げていき、`WARNING: ... not added`(停止線がlaneletの外に出る)が出ない最大値より少し小さい値を選ぶ。Town01の上限は約6.9 m。
   3. 選んだ値と、交差点の入口までの距離の範囲を、手順書2.7.1に書く。
+  - Townによっては0が正解になる。Town05は、CARLAの停止位置がもともと交差点の入口の1.3〜8.1 m手前で、1 mでも`WARNING`が出たので0にした。
+    距離はCARLAの道路で測れる(`get_stop_waypoints()`の各waypointから`next(0.1)`を`is_junction`まで進める)。
+- **多車線の信号**: 1つの信号に停止位置が複数あると、停止位置ごとにregulatory elementができる(Town05は54信号で111個)。
+  OpenDRIVEのIDを持つのは最初の1つだけで、ほかは新しいID。信号灯(`refers`)は共有するので、照合ツールはそれで1信号にまとめる。
 - **IDの衝突**: 既存の地図のIDとlandmark IDがぶつかると止まる。`--group-id-offset 100000`などを付ける。このとき、ブリッジはIDではなく位置で対応付ける(`traffic_light.map_path`、既定で有効)。
 - 終了コード2は、追加されなかった信号があったという意味。理由を1つずつ確かめる。
 - 出力は、元の地図と同じフォルダに置く(CARLAの地図名はフォルダ名から決まる)。
