@@ -330,15 +330,20 @@ Town01のSUMOのnet(`~/CARLA/Co-Simulation/Sumo/examples/net/Town01.net.xml`)に
 ```bash
 # CARLAサーバーを起動し、Town01を読み込んでおく(2.1・2.2)
 cd ~/autoware.1.9.0/src/universe/autoware_universe/simulator/autoware_carla_interface
-python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/Town01/lanelet2_map.osm
+python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/Town01/lanelet2_map.osm --stop-line-forward-offset 6
 ```
 
+- `--stop-line-forward-offset 6`は、停止線をCARLAの停止位置から車線に沿って6 m前に出す。
+  CARLAの停止位置は信号灯の約7 m手前(Town01では6.7〜8.9 m)にあり、そのままだとEGOが交差点のかなり手前で止まるため。
+  Town01では、6 m前に出すと停止線から交差点の入口(laneletの終わり)までが0.96〜7.08 m(信号372では2.72 m)になる。
+  前に出した停止線がlaneletの外(交差点の中)に出る信号は追加せず、`WARNING: ... not added`を出す。
+  Town01でこうならないのは約6.9 mまで。
 - 出力は`~/autoware_map/Town01/lanelet2_map_with_tl.osm`(元の地図は変更しない)。すでにある場合は`--force`で上書きする。
 - 信号ごとに、信号灯・停止線・信号のregulatory element(IDはOpenDRIVEの信号ID)を追加し、
   交差点手前のlaneletに付ける。Town01では36信号すべてが追加される。
 - 出力は元の地図と同じフォルダに置く(CARLAの地図名は`map_path`のフォルダ名から決まるため、
   別のフォルダにすると別の地図を読もうとする)。
-- `WARNING: ... not added`が出た信号は、停止位置に合うlaneletが見つからなかったもの。終了コードは2になる。
+- `WARNING: ... not added`が出た信号は、停止位置に合うlaneletが見つからなかったもの、または前に出した停止線がlaneletの外に出たもの。終了コードは2になる。
 
 #### 2.7.2 起動
 

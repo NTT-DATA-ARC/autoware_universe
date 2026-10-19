@@ -239,6 +239,35 @@ def test_unattached_and_skipped_lights_are_reported(tmp_path):
     assert sorted(o for o, _ in report.skipped) == ["362", "abc"]
 
 
+def test_stop_line_forward_offset_moves_the_line_along_the_lane(tmp_path):
+    left, right = tool.stop_line(_WEST_STOP, forward_offset=6.0)
+    # Westbound: forward is map -x.
+    assert left[:2] == pytest.approx((44.0, -4.0))
+    assert right[:2] == pytest.approx((44.0, 0.0))
+
+    lanelet_map = _load(tmp_path)
+    data = {"traffic_lights": [_light("360", [_box(55.0, -6.0)], [_EAST_STOP])]}
+    report = tool.add_traffic_lights(lanelet_map, data, stop_line_forward_offset=6.0)
+    assert report.regulatory_elements == [(360, "360", 100)]
+    stop_way = _members(_relation(lanelet_map.root, 360))[1][1]
+    assert [p[:2] for p in _way_points(lanelet_map.root, stop_way)] == [
+        pytest.approx((56.0, 4.0)),
+        pytest.approx((56.0, 0.0)),
+    ]
+
+
+def test_stop_line_moved_out_of_its_lanelet_is_not_added(tmp_path):
+    # Lanelet 100 ends at x = 100; 60 m forward from x = 50 leaves it.
+    lanelet_map = _load(tmp_path)
+    data = {"traffic_lights": [_light("360", [_box(55.0, -6.0)], [_EAST_STOP])]}
+    report = tool.add_traffic_lights(lanelet_map, data, stop_line_forward_offset=60.0)
+    assert report.regulatory_elements == []
+    assert [(o, i) for o, i, _ in report.unattached] == [("360", 0)]
+    assert all(
+        m[2] != "regulatory_element" for m in _members(_relation(lanelet_map.root, 100))
+    )
+
+
 def test_several_stop_positions_get_one_element_each(tmp_path):
     # Only the first attached stop carries the OpenDRIVE id; the head is shared.
     lanelet_map = _load(tmp_path)

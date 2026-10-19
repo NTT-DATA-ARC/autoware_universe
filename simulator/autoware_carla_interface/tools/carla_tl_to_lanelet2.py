@@ -11,13 +11,20 @@ tool adds:
 - one `traffic_light` linestring per light head (get_light_boxes()): the bottom edge of the
   head, tagged with its height,
 - one `stop_line` linestring per stop position (get_stop_waypoints()), across the lane,
+  optionally moved forward along the lane by --stop-line-forward-offset,
 - one `regulatory_element` (subtype=traffic_light) per stop position, referring to the
   heads (role `refers`) and the stop line (role `ref_line`),
 - a reference to that regulatory element on the lanelet containing the stop position
   (the lanelet approaching the intersection, matched by position and direction).
 
 The regulatory-element id is the OpenDRIVE signal id (+ --group-id-offset), so the bridge's
-OpenDRIVE-id fallback and its position matching both resolve to it. A light with several
+OpenDRIVE-id fallback and its position matching both resolve to it.
+
+CARLA's stop positions lie about 7 m before the light heads (6.7-8.9 m in Town01), so Autoware
+stops well back from the intersection. --stop-line-forward-offset moves every stop line that
+far forward along the lane; a stop line that would leave its lanelet (i.e. enter the
+intersection) is not added and is reported as unattached. In Town01 the stop positions lie
+7.0-13.1 m before the end of their lanelet, so up to about 6 m keeps every stop line. A light with several
 stop positions gets one regulatory element per stop position; only the first one attached
 to a lanelet carries the OpenDRIVE id, so such maps need traffic_light.map_path (position matching).
 
@@ -136,13 +143,23 @@ def head_line(box):
     return ((cx - dx * half, cy - dy * half, z), (cx + dx * half, cy + dy * half, z)), 2.0 * ez
 
 
-def stop_line(stop):
-    """Stop line across the lane at a stop position, as two (x, y, z) points (left, right)."""
+def stop_point(stop, forward_offset=0.0):
+    """Map (x, y) of a stop position, moved forward_offset [m] along the driving direction."""
+    dx, dy = carla_yaw_to_map_dir(stop["yaw"])
+    x, y = carla_to_map(stop["x"], stop["y"])
+    return (x + dx * forward_offset, y + dy * forward_offset)
+
+
+def stop_line(stop, forward_offset=0.0):
+    """Stop line across the lane at a stop position, as two (x, y, z) points (left, right).
+
+    forward_offset [m] moves the line forward along the driving direction.
+    """
     dx, dy = carla_yaw_to_map_dir(stop["yaw"])
     # Left of the driving direction in the (right-handed) map frame.
     lx, ly = -dy, dx
     half = stop["lane_width"] / 2.0
-    cx, cy = carla_to_map(stop["x"], stop["y"])
+    cx, cy = stop_point(stop, forward_offset)
     z = stop["z"]
     return ((cx + lx * half, cy + ly * half, z), (cx - lx * half, cy - ly * half, z))
 
@@ -222,6 +239,11 @@ class Lanelet2Map:
     def load(cls, path):
         return cls(ET.parse(path))
 
+    def contains(self, lanelet_id, point):
+        """Whether point lies inside the lanelet."""
+        _, left, right = self.lanelets[lanelet_id]
+        return _point_in_polygon(point[0], point[1], left + right[::-1])
+
     def lanelet_at(self, point, direction):
         """Id of the lanelet containing point whose direction agrees, or None.
 
@@ -266,8 +288,11 @@ class Report:
         self.skipped = []  # (opendrive id, reason)
 
 
-def add_traffic_lights(lanelet_map, carla_data, group_id_offset=0):
+def add_traffic_lights(lanelet_map, carla_data, group_id_offset=0, stop_line_forward_offset=0.0):
     """Add the CARLA traffic lights to lanelet_map (in place) and return a Report.
+
+    stop_line_forward_offset [m] moves every stop line forward along the lane. A stop line
+    that would leave the lanelet of its stop position is not added (reported as unattached).
 
     Raises ConversionError if a regulatory-element id derived from an OpenDRIVE id is
     already used by the map, or if the map already has traffic-light regulatory elements.
@@ -335,7 +360,20 @@ def add_traffic_lights(lanelet_map, carla_data, group_id_offset=0):
                     )
                 )
                 continue
-            stop_way_id = builder.add_way(list(stop_line(stop)), {"type": "stop_line"})
+            # The lanelet is found from CARLA's stop position; the moved stop line must stay in it.
+            if not lanelet_map.contains(lanelet_id, stop_point(stop, stop_line_forward_offset)):
+                report.unattached.append(
+                    (
+                        light["opendrive_id"],
+                        index,
+                        f"the stop line moved {stop_line_forward_offset} m forward leaves "
+                        f"lanelet {lanelet_id}",
+                    )
+                )
+                continue
+            stop_way_id = builder.add_way(
+                list(stop_line(stop, stop_line_forward_offset)), {"type": "stop_line"}
+            )
             # The first attached stop position carries the OpenDRIVE-derived id.
             regelem_id = builder.new_id() if reserved_id_used else reserved[id(light)]
             reserved_id_used = True
@@ -465,6 +503,13 @@ def main(argv=None):
         default=0,
         help="regulatory-element id = OpenDRIVE id + this (default: 0)",
     )
+    parser.add_argument(
+        "--stop-line-forward-offset",
+        type=float,
+        default=0.0,
+        help="move every stop line this far [m] forward along the lane from CARLA's stop "
+        "position (default: 0)",
+    )
     parser.add_argument("--force", action="store_true", help="overwrite --output if it exists")
     args = parser.parse_args(argv)
 
@@ -492,7 +537,9 @@ def main(argv=None):
 
     lanelet_map = Lanelet2Map.load(args.map)
     try:
-        report = add_traffic_lights(lanelet_map, carla_data, args.group_id_offset)
+        report = add_traffic_lights(
+            lanelet_map, carla_data, args.group_id_offset, args.stop_line_forward_offset
+        )
     except ConversionError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1

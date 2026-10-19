@@ -367,16 +367,23 @@ The parameters are validated at startup: a `traffic_light.map_path` that is not 
 copy of a lanelet2 map with, for every CARLA light:
 
 - a `traffic_light` linestring per light head (bottom edge of the head, tagged with its height),
-- a `stop_line` linestring across the lane at the CARLA stop position,
+- a `stop_line` linestring across the lane at the CARLA stop position, moved forward along the
+  lane by `--stop-line-forward-offset` [m] (default 0),
 - a `traffic_light` regulatory element (`refers` = heads, `ref_line` = stop line) whose id is the
   OpenDRIVE signal id (plus `--group-id-offset`),
 - a reference to it on the lanelet that contains the stop position (the approach lanelet).
 
 ```bash
 # CARLA running with Town01 loaded
-python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/Town01/lanelet2_map.osm
+python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/Town01/lanelet2_map.osm --stop-line-forward-offset 6
 # -> ~/autoware_map/Town01/lanelet2_map_with_tl.osm (the input map is not modified)
 ```
+
+CARLA's stop positions lie about 7 m before the light heads (6.7-8.9 m in Town01), so without an
+offset the ego vehicle stops well back from the intersection. With `--stop-line-forward-offset 6`
+the Town01 stop lines end up 0.96-7.08 m before the end of their approach lanelet. A stop line
+that the offset would move out of its lanelet (into the intersection) is not added and is
+reported as `not added` (exit code 2).
 
 Keep the output in the same map directory (the CARLA map name is taken from the directory name).
 The tool stops with an error if an OpenDRIVE id collides with an existing lanelet2 id (use
