@@ -348,6 +348,7 @@ class InitializeInterface(object):
             tls_manager=self.tls_manager,
             sync_vehicle_color=self.sync_vehicle_color,
             sync_vehicle_lights=self.sync_vehicle_lights,
+            ego_role_name=self.agent_role_name,
         )
         self.interface.logger.info(
             "SUMO co-simulation connected (sync engine ready; will be ticked each loop iteration)."

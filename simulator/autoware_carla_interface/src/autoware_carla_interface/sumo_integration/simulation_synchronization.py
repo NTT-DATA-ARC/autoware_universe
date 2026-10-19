@@ -40,6 +40,11 @@ import logging
 from .bridge_helper import BridgeHelper
 from .constants import INVALID_ACTOR_ID
 
+# Color (r,g,b) of the EGO vehicle in SUMO (sumo-gui). The color CARLA picks for the EGO
+# (Prius, fixed-seed random choice) is a dark red that is hard to see in sumo-gui, so the EGO
+# is always drawn in this bright red instead, whether sync_vehicle_color is on or off.
+EGO_SUMO_COLOR = '255,60,60'
+
 # ==================================================================================================
 # -- simulation synchronization ---------------------------------------------------------------------
 # ==================================================================================================
@@ -55,7 +60,8 @@ class SimulationSynchronization(object):
                  carla_simulation,
                  tls_manager='none',
                  sync_vehicle_color=False,
-                 sync_vehicle_lights=False):
+                 sync_vehicle_lights=False,
+                 ego_role_name=None):
 
         self.sumo = sumo_simulation
         self.carla = carla_simulation
@@ -63,6 +69,7 @@ class SimulationSynchronization(object):
         self.tls_manager = tls_manager
         self.sync_vehicle_color = sync_vehicle_color
         self.sync_vehicle_lights = sync_vehicle_lights
+        self.ego_role_name = ego_role_name
 
         if tls_manager == 'carla':
             self.sumo.switch_off_traffic_lights()
@@ -304,6 +311,9 @@ class SimulationSynchronization(object):
 
             type_id = BridgeHelper.get_sumo_vtype(carla_actor)
             color = carla_actor.attributes.get('color', None) if self.sync_vehicle_color else None
+            if (self.ego_role_name is not None
+                    and carla_actor.attributes.get('role_name') == self.ego_role_name):
+                color = EGO_SUMO_COLOR
             if type_id is not None:
                 sumo_actor_id = self.sumo.spawn_actor(type_id, color)
                 if sumo_actor_id != INVALID_ACTOR_ID:
