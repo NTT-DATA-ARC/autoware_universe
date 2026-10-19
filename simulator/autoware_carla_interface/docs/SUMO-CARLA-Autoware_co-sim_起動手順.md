@@ -114,7 +114,7 @@ ros2 launch autoware_launch e2e_simulator.launch.xml \
   sync_vehicle_lights:=true \
   sync_vehicle_color:=true \
   sumo_warmup_time:=600 \
-  spawn_point:="334.74,263.00,0.30,0.0,0.0,90.0" \
+  spawn_point:="267.65,133.49,0.30,0.0,0.0,0.0" \
   spectator_follow:=true \
   2>&1 | tee -i /tmp/autoware_carla.log
 ```
@@ -135,7 +135,7 @@ ros2 launch autoware_launch e2e_simulator.launch.xml \
 | `sync_vehicle_lights` | 灯火同期 | `true` | `false` |
 | `sync_vehicle_color` | 車体色同期 | `true` | `false` |
 | `spectator_follow` | EGO車両(role_name=`ego_vehicle_role_name`)にCARLAスペクテーターを自動追従させる | `true` | `false` |
-| `spawn_point` | EGOのスポーン位置(CARLA座標、`x,y,z,roll,pitch,yaw`) | `"334.74,263.00,0.30,0.0,0.0,90.0"` | `None`(ランダム) |
+| `spawn_point` | EGOのスポーン位置(CARLA座標、`x,y,z,roll,pitch,yaw`) | `"267.65,133.49,0.30,0.0,0.0,0.0"` | `None`(ランダム) |
 | `vehicle_type` | EGOのCARLAブループリント | `vehicle.toyota.prius` | `vehicle.toyota.prius` |
 | `sumo_warmup_time` | SUMOだけを先に進める秒数(整数)。0で無効。2.4.2参照 | `600` | `0`(無効) |
 | `ego_spawn_front_margin` | EGOスポーン時に必要な前方車とのすき間 [m]。2.4.2参照 | `20.0` | `20.0` |
@@ -230,7 +230,7 @@ Town01(`rou/Town01.rou.xml`、2026-10-19以降: 入力1・2が各300台/h、多�
 | #36 | SUMO車両が来ない(すぐスポーン) | `-6.0.00`(#37の対向車線) | 0台/h | `199.95,330.46,0.30,0.0,0.0,-0.0` |
 | #144 | 別の道路で交通量が多い | `1.0.00` | 282台/h | `256.55,2.02,0.30,0.0,0.0,-0.0` |
 | #249 | 交通量が少ない | `-4.0.00` | 101台/h | `220.14,133.24,0.30,0.0,0.0,-0.0` |
-| — | 信号372の手前(信号状態の直接通知の確認用、2.7参照)。2.4.1の起動コマンド例の地点 | `-19.0.00` | 349台/h | `334.74,263.00,0.30,0.0,0.0,90.0` |
+| — | 信号372の手前(信号状態の直接通知の確認用、2.7参照) | `-19.0.00` | 349台/h | `334.74,263.00,0.30,0.0,0.0,90.0` |
 
 - `sumo_warmup_time:=600`・既定の必要距離での実績: #37は空き待ち13.75秒(シミュレーション時間)でスポーン、#36は待ちなし。
 - 上の交通量と空き待ちの実績は、SUMOの信号が2交差点(CARLAの信号360〜362・372〜374)だけだったときの値。
