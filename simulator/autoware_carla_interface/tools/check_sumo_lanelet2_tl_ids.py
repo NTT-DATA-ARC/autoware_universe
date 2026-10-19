@@ -6,7 +6,10 @@ A CARLA traffic light is identified by its OpenDRIVE landmark id, which appears 
 - the SUMO net: <param key="linkSignalID:<linkIndex>" value="<landmark>"/> of each tlLogic
   (added by ~/CARLA/Co-Simulation/Sumo/util/add_carla_tls.py), and
 - the Lanelet2 map: the id of each traffic_light regulatory element, minus --group-id-offset
-  (added by tools/carla_tl_to_lanelet2.py).
+  (added by tools/carla_tl_to_lanelet2.py). A light with several stop positions (one per lane,
+  e.g. Town05) gets one regulatory element per stop position, all referring to the same light
+  heads; only the first (smallest id) carries the OpenDRIVE id, so regulatory elements sharing
+  their light heads count as one light with the smallest id.
 This tool reports the landmarks found on only one side, landmarks split over several tlLogics,
 and, with --carla-json (the --dump-json output of carla_tl_to_lanelet2.py), CARLA lights
 missing from either side.
@@ -52,14 +55,21 @@ def sumo_landmarks(net_path):
 
 
 def lanelet2_landmarks(osm_path, group_id_offset=0):
-    """Return the landmark ids of the traffic_light regulatory elements of a Lanelet2 map."""
+    """Return ({landmark id}, number of traffic_light regulatory elements) of a Lanelet2 map."""
     root = ET.parse(osm_path).getroot()
-    ids = set()
+    groups = {}  # light heads (refers) -> regulatory element ids
     for relation in root.findall("relation"):
         tags = {tag.get("k"): tag.get("v") for tag in relation.findall("tag")}
         if tags.get("type") == "regulatory_element" and tags.get("subtype") == "traffic_light":
-            ids.add(str(int(relation.get("id")) - group_id_offset))
-    return ids
+            regelem_id = int(relation.get("id"))
+            heads = frozenset(
+                member.get("ref")
+                for member in relation.findall("member")
+                if member.get("role") == "refers"
+            )
+            groups.setdefault(heads or ("regelem", regelem_id), []).append(regelem_id)
+    ids = {str(min(regelem_ids) - group_id_offset) for regelem_ids in groups.values()}
+    return ids, sum(len(regelem_ids) for regelem_ids in groups.values())
 
 
 def carla_landmarks(json_path):
@@ -75,13 +85,13 @@ def _sorted_ids(ids):
 def check(net_path, osm_path, carla_json=None, group_id_offset=0, report_mixed=False):
     """Print the comparison and return True if both sides agree."""
     sumo, mixed = sumo_landmarks(net_path)
-    lanelet2 = lanelet2_landmarks(osm_path, group_id_offset)
+    lanelet2, regelem_count = lanelet2_landmarks(osm_path, group_id_offset)
     sumo_ids = set(sumo)
     problems = []
 
     print(f"SUMO: {len(sumo_ids)} landmarks in {len(set().union(*sumo.values()))} tlLogics")
     print(
-        f"Lanelet2: {len(lanelet2)} traffic-light regulatory elements "
+        f"Lanelet2: {len(lanelet2)} traffic lights in {regelem_count} regulatory elements "
         f"(group id offset {group_id_offset})"
     )
     problems.append(("only in SUMO", sumo_ids - lanelet2))

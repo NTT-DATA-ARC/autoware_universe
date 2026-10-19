@@ -99,3 +99,20 @@ def test_missing_and_split_landmarks_fail(tmp_path, capsys):
     assert "NG only in Lanelet2 (or not an OpenDRIVE id): ['13']" in out
     assert "NG in CARLA but not in SUMO: ['14']" in out
     assert "NG in several tlLogics: ['10']" in out
+
+
+def test_several_stop_positions_count_as_one_light(tmp_path, capsys):
+    # As carla_tl_to_lanelet2.py writes a light with two lanes: the second regulatory element
+    # gets a fresh id but refers to the same light heads as the first.
+    def regelem(regelem_id, heads):
+        members = "".join(f'<member type="way" ref="{h}" role="refers"/>' for h in heads)
+        return (
+            f'<relation id="{regelem_id}">{members}<tag k="subtype" v="traffic_light"/>'
+            f'<tag k="type" v="regulatory_element"/></relation>'
+        )
+
+    relations = regelem(10, [1, 2]) + regelem(11, [3]) + regelem(12, [4]) + regelem(50, [2, 1])
+    osm = _write(tmp_path, "a.osm", f"<osm>{relations}</osm>")
+    assert tool.lanelet2_landmarks(osm) == ({"10", "11", "12"}, 4)
+    assert tool.main([_write(tmp_path, "a.net.xml", _NET), osm]) == 0
+    assert "Lanelet2: 3 traffic lights in 4 regulatory elements" in capsys.readouterr().out
