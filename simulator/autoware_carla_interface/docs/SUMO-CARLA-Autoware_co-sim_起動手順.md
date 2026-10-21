@@ -180,7 +180,7 @@ ros2 launch autoware_launch e2e_simulator.launch.xml \
 - `sumo_warmup_time`は`60`にする。Town05・Town10HDのSUMOのルートは0〜199秒に計200台だけなので、
   Town01と同じ`600`にすると、EGOのスポーン時には車がいなくなっている。
 - `lanelet2_map_with_tl.osm`は、2.7.1の「Town05」「Town10HD」の手順で作っておく(重複点を直した地図から作ること)。
-- Town10HDは、この起動コマンドで実機確認済み(2026-10-21、2.7.1「Town10HD」)。Town05は地図・SUMOの信号とIDの照合までで、実機確認はまだ(2.7.4)。
+- Town05・Town10HDとも、この起動コマンドで実機確認済み(2026-10-21、2.7.1の「Town05」「Town10HD」)。
 - ゴールの置き方は2.7.1の各Townの項を参照(Town05は同じ道路を2回通る場所に置くと経路ができない。
   Town10HDはスポーン地点の先の交差点を抜けた道路5の上、map座標で(-104, -99)付近)。
 
@@ -473,7 +473,7 @@ python3 tools/check_sumo_lanelet2_tl_ids.py ~/CARLA/Co-Simulation/Sumo/examples/
   (-153, -3)や(-129, 24)へは約1.6 kmの遠回りになり、途中で同じ道路の隣の車線を通るため、
   `Loop detected within route!`(`The planned route is empty.`)で経路ができない。
   (-44, 50)北向きや(0, 84)東向きは経路ができる(座標はmap座標。mission_plannerだけ起動して確認)。
-- 実機(2.7.2)での確認はまだ。
+- 実機(2.7.2)で確認済み(2026-10-21、利用者が確認。2.4.1のTown05の起動コマンド)。
 
 **Town10HD**(2026-10-21に作成):
 
@@ -556,5 +556,5 @@ grep -nE "Traffic-light matching|Traffic lights|traffic-light|force_green" /tmp/
   Town01で起きるのは、信号パターンを手で設定した信号360と374だけ。後から設置した30個の信号は、対応するリンクが常に同じ色になる。
 - RMWは`~/.bashrc`と同じ`RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`で起動すること。Fast DDSで起動したときは
   ノードどうしの通信が一部できず、Autoを押せる状態にならなかった。
-- 実機で確認済みの地図はTown01とTown10HD(Town05は地図と照合まで)。別の地図では、2.7.1のツールが既存のIDとぶつかって止まることがある。
+- 実機で確認済みの地図はTown01・Town05・Town10HD。別の地図では、2.7.1のツールが既存のIDとぶつかって止まることがある。
   その場合は`--group-id-offset`(例: `--group-id-offset 100000`)を付け、2.7.2の位置の対応付け(既定)で使う。
