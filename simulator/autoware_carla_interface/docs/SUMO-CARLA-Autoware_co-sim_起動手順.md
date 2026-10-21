@@ -39,13 +39,25 @@ cd ~/CARLA
 コマンドを実行すると、CARLAサーバーが起動し、CARLA(Unreal Engine)の画面が表示される。
 
 
-## 2.2 Town01ロード(ターミナル2)
+## 2.2 マップのロード(ターミナル2)
 
 ```bash
 cd ~/CARLA/PythonAPI/util
 python3 config.py --map Town01
 ```
 コマンドを実行すると、CARLAで読み込まれているマップが Town01 に切り替わる。CARLA画面が Town01 の地図に更新されたことを確認する。
+
+Town05・Town10HDを使うときは、`--map`だけを変える。2.4.1の起動コマンドも、同じTownのものを使う。
+
+```bash
+# Town05
+python3 config.py --map Town05
+```
+
+```bash
+# Town10HD
+python3 config.py --map Town10HD
+```
 
 
 ### 2.3 ビルド(ターミナル3)
@@ -118,6 +130,59 @@ ros2 launch autoware_launch e2e_simulator.launch.xml \
   spectator_follow:=true \
   2>&1 | tee -i /tmp/autoware_carla.log
 ```
+
+Town05・Town10HDの起動コマンド(Town01との違いは`map_path`・`sumo_cfg_file`・`sumo_warmup_time`・`spawn_point`の4行):
+
+```bash
+# Town05(信号2408の手前にスポーン。2.7.1「Town05」)
+ros2 launch autoware_launch e2e_simulator.launch.xml \
+  simulator_type:=carla \
+  map_path:=$HOME/autoware_map/Town05 \
+  lanelet2_map_file:=lanelet2_map_with_tl.osm \
+  vehicle_model:=sample_vehicle \
+  sensor_model:=carla_sensor_kit \
+  use_sumo:=true \
+  sumo_gui:=true \
+  sumo_cfg_file:=/home/divp/CARLA/Co-Simulation/Sumo/examples/Town05.sumocfg \
+  tls_manager:=sumo \
+  traffic_light.publish:=true \
+  sync_vehicle_lights:=true \
+  sync_vehicle_color:=true \
+  sumo_warmup_time:=60 \
+  spawn_point:="24.71,-51.03,0.30,0.0,0.0,91.5" \
+  spectator_follow:=true \
+  2>&1 | tee -i /tmp/autoware_carla.log
+```
+
+```bash
+# Town10HD(信号954の手前にスポーン。2.7.1「Town10HD」)
+ros2 launch autoware_launch e2e_simulator.launch.xml \
+  simulator_type:=carla \
+  map_path:=$HOME/autoware_map/Town10HD \
+  lanelet2_map_file:=lanelet2_map_with_tl.osm \
+  vehicle_model:=sample_vehicle \
+  sensor_model:=carla_sensor_kit \
+  use_sumo:=true \
+  sumo_gui:=true \
+  sumo_cfg_file:=/home/divp/CARLA/Co-Simulation/Sumo/examples/Town10HD.sumocfg \
+  tls_manager:=sumo \
+  traffic_light.publish:=true \
+  sync_vehicle_lights:=true \
+  sync_vehicle_color:=true \
+  sumo_warmup_time:=60 \
+  spawn_point:="30.02,133.95,0.30,0.0,0.0,-179.7" \
+  spectator_follow:=true \
+  2>&1 | tee -i /tmp/autoware_carla.log
+```
+
+- `source install/setup.bash`と`export ROS_DOMAIN_ID=33`はTown01と同じく先に実行しておく。
+- `map_path`のフォルダ名(Town05・Town10HD)が、2.2でCARLAに読み込んだマップと同じであること。
+- `sumo_warmup_time`は`60`にする。Town05・Town10HDのSUMOのルートは0〜199秒に計200台だけなので、
+  Town01と同じ`600`にすると、EGOのスポーン時には車がいなくなっている。
+- `lanelet2_map_with_tl.osm`は、2.7.1の「Town05」「Town10HD」の手順で作っておく(重複点を直した地図から作ること)。
+- Town05・Town10HDは、地図・SUMOの信号とIDの照合までは確認済みで、この起動コマンドでの実機確認はまだ(2.7.4)。
+- ゴールの置き方は2.7.1の各Townの項を参照(Town05は同じ道路を2回通る場所に置くと経路ができない。
+  Town10HDはスポーン地点の先の交差点を抜けた道路5の上、map座標で(-104, -99)付近)。
 
 | オプション | 説明 | 設定例 | デフォルト値(未指定時) |
 |-----------|------|--------|--------------------------|
@@ -326,6 +391,7 @@ CARLAが管理している信号の状態(赤・黄・青)を、カメラ画像�
 Town01のSUMOのnet(`~/CARLA/Co-Simulation/Sumo/examples/net/Town01.net.xml`)には、CARLAの信号36個すべてに対応する信号がある
 (設置方法と信号パターンは`~/CARLA/Co-Simulation/Sumo/docs/SUMO-CARLA_co-sim_起動手順.md`の「SUMOの信号(Town01)」を参照)。
 Town05のnetにも、CARLAの信号54個すべてに対応する信号がある(同「SUMOの信号(Town05)」、地図は2.7.1の「Town05」)。
+Town10HDは、netとルートを作り、CARLAの信号15個すべてに対応する信号を置いた(同「SUMOの信号(Town10HD)」、地図は2.7.1の「Town10HD」)。
 
 #### 2.7.1 信号入りのLanelet2地図を作る(最初に1回)
 
@@ -371,6 +437,10 @@ python3 tools/check_sumo_lanelet2_tl_ids.py ~/CARLA/Co-Simulation/Sumo/examples/
 # 地図はTown01と同じ配布元(CARLA autoware-contents の vector_maps/lanelet2/Town05.osm)を
 # ~/autoware_map/Town05/lanelet2_map.osm に置く。点群も同じ配布元の point_cloud_maps/Town05.pcd(y軸反転版)を
 # pointcloud_map.pcd に置く。map_projector_info.yaml は「projector_type: Local」。
+# 配布元の地図は境界線に同じ位置の点が続くので、先に直す(下の「重複点」。元の地図は .orig に残す)。
+cp ~/autoware_map/Town05/lanelet2_map.osm ~/autoware_map/Town05/lanelet2_map.osm.orig
+python3 tools/fix_lanelet2_duplicate_points.py ~/autoware_map/Town05/lanelet2_map.osm.orig \
+    ~/autoware_map/Town05/lanelet2_map.osm
 # CARLAサーバーでTown05を読み込んでおく(2.2の--mapをTown05にする)。2回目からは--dump-jsonの代わりに--from-json。
 python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/Town05/lanelet2_map.osm \
     --dump-json ~/autoware_map/Town05/carla_tl.json --stop-line-forward-offset 0 --group-id-offset 100000
@@ -393,6 +463,46 @@ python3 tools/check_sumo_lanelet2_tl_ids.py ~/CARLA/Co-Simulation/Sumo/examples/
   `spawn_point:="24.71,-51.03,0.30,0.0,0.0,91.5"`。手前の交差点から26 m、CARLAの停止位置まで31 m。
   Town05は交差点の間隔が短く(約60 m)、前後とも30 m以上取れる直線のスポーン地点はない。
   `rou/Town05.rou.xml`は0〜199秒に計200台なので、`sumo_warmup_time`は`60`程度にする(600だと車がいなくなる)。
+- **重複点**: 配布元のTown05の地図は、48本のlaneletで境界線の最初の2点が同じ位置にある(Town10HDは10本、Town01はなし)。
+  そのままだと、map_loaderが作り直す中心線の先頭がNaNになり、そこを通る経路の長さもNaNになる。
+  mission_plannerは空の経路を受け取り、`component_container_mt`(mission_planner_container)が終了コード-11で落ちる。
+  RVizで2D Goal Poseを置いても経路ができず、以降のゴールも受け付けない(2026-10-21に発生。信号の有無に関係ない)。
+  `tools/fix_lanelet2_duplicate_points.py`で直す。`--check`を付けると直さずに数だけ表示する(重複があれば終了コード1)。
+  信号入りの地図を直す前の地図から作った場合は、`lanelet2_map_with_tl.osm`にも同じツールをかければよい。
+- ゴールは、同じ道路を2回通らずに行ける場所に置く。スポーン地点(`24.71,-51.03`、南向き)から西側の
+  (-153, -3)や(-129, 24)へは約1.6 kmの遠回りになり、途中で同じ道路の隣の車線を通るため、
+  `Loop detected within route!`(`The planned route is empty.`)で経路ができない。
+  (-44, 50)北向きや(0, 84)東向きは経路ができる(座標はmap座標。mission_plannerだけ起動して確認)。
+- 実機(2.7.2)での確認はまだ。
+
+**Town10HD**(2026-10-21に作成):
+
+```bash
+# 地図・点群は2026-07-16に置いたもの(Town05と同じ配布元。点群の座標が地図と合うことを確かめた)。
+# 配布元の地図は10本のlaneletで境界線に同じ位置の点が続くので、先に直す(元の地図は .orig に残す)。
+cp ~/autoware_map/Town10HD/lanelet2_map.osm ~/autoware_map/Town10HD/lanelet2_map.osm.orig
+python3 tools/fix_lanelet2_duplicate_points.py ~/autoware_map/Town10HD/lanelet2_map.osm.orig \
+    ~/autoware_map/Town10HD/lanelet2_map.osm
+# CARLAサーバーでTown10HDを読み込んでおく(2.2の--mapをTown10HDにする)。2回目からは--dump-jsonの代わりに--from-json。
+python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/Town10HD/lanelet2_map.osm \
+    --dump-json ~/autoware_map/Town10HD/carla_tl.json --stop-line-forward-offset 0 --group-id-offset 100000
+python3 tools/check_sumo_lanelet2_tl_ids.py ~/CARLA/Co-Simulation/Sumo/examples/net/Town10HD.net.xml \
+    ~/autoware_map/Town10HD/lanelet2_map_with_tl.osm --carla-json ~/autoware_map/Town10HD/carla_tl.json \
+    --report-mixed --group-id-offset 100000
+```
+
+- 信号は15個(landmark 943〜945・949〜954・957〜962)。どれも2車線で、計30個のregulatory elementができる
+  (`Lanelet2: 15 traffic lights in 30 regulatory elements`)。結果は`OK`、`INFO`(赤に置き換えられる信号)はなし。
+- `--group-id-offset 100000`: 付けないと、地図の既存のID(943など。最大9690)とぶつかって止まる。
+- `--stop-line-forward-offset 0`: CARLAの停止位置は、もともと交差点の入口の0.9〜6.9 m手前(中央値5.4 m、CARLAの道路で測った値)。
+  Town05と同じく1 mでも`WARNING: ... not added`が出る(1 mで4か所、3 mで8か所、6 mで24か所)ので、前に出さない。
+- SUMOは`examples/Town10HD.sumocfg`を使う(2.4.1の`map_path`・`sumo_cfg_file`のTown01をTown10HDに置き換える)。
+  ルートは0〜199秒に計200台なので、Town05と同じく`sumo_warmup_time`は`60`程度にする。
+- 信号の手前に向かうスポーン地点: 信号954の手前(CARLAのスポーン地点#80、SUMOの`1_4`、ルートの34台が通る)
+  `spawn_point:="30.02,133.95,0.30,0.0,0.0,-179.7"`。CARLAの停止位置まで51 m、手前の交差点から110 m
+  (後ろ36 mから先はカーブ)。SUMOの車両の19台がこのedge(`1`)の始点から出発するが、スポーン地点から約110 m後ろ。
+  信号954(junction 468)はSUMOで0〜42秒が青、42〜45秒が黄、45〜90秒が赤の繰り返し。
+  この車線は交差点を抜けると道路5へ曲がって続くだけなので、ゴールはその先(map座標で(-104, -99)付近、北北西向き)に置く。
 - 実機(2.7.2)での確認はまだ。
 
 #### 2.7.2 起動
@@ -443,5 +553,5 @@ grep -nE "Traffic-light matching|Traffic lights|traffic-light|force_green" /tmp/
   Town01で起きるのは、信号パターンを手で設定した信号360と374だけ。後から設置した30個の信号は、対応するリンクが常に同じ色になる。
 - RMWは`~/.bashrc`と同じ`RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`で起動すること。Fast DDSで起動したときは
   ノードどうしの通信が一部できず、Autoを押せる状態にならなかった。
-- 実機で確認済みの地図はTown01だけ(Town05は地図と照合まで)。Town10HDなど別の地図では、2.7.1のツールが既存のIDとぶつかって止まることがある。
+- 実機で確認済みの地図はTown01だけ(Town05・Town10HDは地図と照合まで)。別の地図では、2.7.1のツールが既存のIDとぶつかって止まることがある。
   その場合は`--group-id-offset`(例: `--group-id-offset 100000`)を付け、2.7.2の位置の対応付け(既定)で使う。

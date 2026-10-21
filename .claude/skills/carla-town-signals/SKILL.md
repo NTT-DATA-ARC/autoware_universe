@@ -20,6 +20,7 @@ CARLAの信号1つ = OpenDRIVEのlandmark ID 1つ。この**同じID**を次の2
 | SUMO→CARLAの状態変換 | `~/CARLA/Co-Simulation/Sumo/sumo_integration/bridge_helper.py` `get_carla_traffic_light_state`                                                  |
 | Lanelet2の信号ツール | `<autoware_universe>/simulator/autoware_carla_interface/tools/carla_tl_to_lanelet2.py`(テスト: `test/test_carla_tl_to_lanelet2.py`)             |
 | Lanelet2地図         | `~/autoware_map/<Town>/lanelet2_map.osm` → `lanelet2_map_with_tl.osm`                                                                           |
+| 地図の重複点の修正   | `<autoware_universe>/simulator/autoware_carla_interface/tools/fix_lanelet2_duplicate_points.py`(テスト: `test/test_fix_lanelet2_duplicate_points.py`) |
 | Autoware側の手順書   | `<autoware_universe>/simulator/autoware_carla_interface/docs/SUMO-CARLA-Autoware_co-sim_起動手順.md` 2.4.3・2.7                                 |
 | 設計と確認結果       | 同`docs/CARLA_Autoware_信号状態publish_実装計画_v1.0.md`                                                                                        |
 | IDの照合             | `<autoware_universe>/simulator/autoware_carla_interface/tools/check_sumo_lanelet2_tl_ids.py`(テスト: `test/test_check_sumo_lanelet2_tl_ids.py`) |
@@ -45,6 +46,16 @@ python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/<Town>/lanelet2_map.osm \
 地図がまだないTownは、Town01と同じ配布元(CARLA autoware-contents)の`vector_maps/lanelet2/<Town>.osm`と`point_cloud_maps/<Town>.pcd`(y軸反転版)を使う。
 `~/CARLA/HDMaps/<Town>.pcd`はCARLAの座標のままなので使わない(NDTの自己位置がずれ、RVizでEGOが車線をまたぐ)。
 
+配布元の地図は、境界線に同じ位置の点が続くことがある(Town05は48本、Town10HDは10本のlanelet、Town01はなし)。
+そのままだと中心線の先頭がNaNになり、2D Goal Poseを置くとmission_plannerが落ちて経路ができない。
+信号を置く前に`tools/fix_lanelet2_duplicate_points.py`で直す(`--check`で数だけ見られる)。
+
+```bash
+cp ~/autoware_map/<Town>/lanelet2_map.osm ~/autoware_map/<Town>/lanelet2_map.osm.orig
+python3 tools/fix_lanelet2_duplicate_points.py ~/autoware_map/<Town>/lanelet2_map.osm.orig \
+    ~/autoware_map/<Town>/lanelet2_map.osm
+```
+
 ### 2. SUMOのnetに信号を置く
 
 ```bash
@@ -65,6 +76,13 @@ SUMO_HOME=$(python3 -c 'import sumo; print(sumo.SUMO_HOME)') python3 util/add_ca
 
 出力の`junction <id>: landmarks [...]`の行で、どの交差点にどの信号が付いたかを確認する。
 
+**netがまだないTown**(CARLA同梱の例はTown01・04・05だけ。Town10HDは2026-10-21に作った):
+`netconvert_carla.py`でxodrからnetを作り、信号を外して全交差点を`priority`にしてから`add_carla_tls.py`をかける
+(`netconvert --tls.unset <ids>`だけでは`type="traffic_light"`が残るので、`sed`で`priority`に書き換えて`netconvert -s`で作り直す)。
+このnetのedgeのIDには接尾辞がないので`--edge-suffix ''`を付ける。コマンドはSUMO側の手順書「SUMOの信号(Town10HD)」。
+ルートは`randomTrips.py`で、既存のTownと同じく0〜199秒に計200台を作り、車種は既存のルートと同じ種類から選ぶ。`examples/<Town>.sumocfg`も作る。
+xodrには、名前がなくCARLAにアクタのない信号がある(Town10HDの955・956)。CARLAの信号の数はCARLAから読んだ数(手順1)を正とする。
+
 ### 3. Lanelet2地図に信号と停止線を置く
 
 ```bash
@@ -76,9 +94,9 @@ python3 tools/carla_tl_to_lanelet2.py ~/autoware_map/<Town>/lanelet2_map.osm \
   1. まず`0`で作り、`WARNING`がないことを確かめる。
   2. 値を上げていき、`WARNING: ... not added`(停止線がlaneletの外に出る)が出ない最大値より少し小さい値を選ぶ。Town01の上限は約6.9 m。
   3. 選んだ値と、交差点の入口までの距離の範囲を、手順書2.7.1に書く。
-  - Townによっては0が正解になる。Town05は、CARLAの停止位置がもともと交差点の入口の1.3〜8.1 m手前で、1 mでも`WARNING`が出たので0にした。
+  - Townによっては0が正解になる。Town05は、CARLAの停止位置がもともと交差点の入口の1.3〜8.1 m手前で、1 mでも`WARNING`が出たので0にした。Town10HDも0.9〜6.9 m手前で、同じく0。
     距離はCARLAの道路で測れる(`get_stop_waypoints()`の各waypointから`next(0.1)`を`is_junction`まで進める)。
-- **多車線の信号**: 1つの信号に停止位置が複数あると、停止位置ごとにregulatory elementができる(Town05は54信号で111個)。
+- **多車線の信号**: 1つの信号に停止位置が複数あると、停止位置ごとにregulatory elementができる(Town05は54信号で111個、Town10HDは15信号で30個)。
   OpenDRIVEのIDを持つのは最初の1つだけで、ほかは新しいID。信号灯(`refers`)は共有するので、照合ツールはそれで1信号にまとめる。
 - **IDの衝突**: 既存の地図のIDとlandmark IDがぶつかると止まる。`--group-id-offset 100000`などを付ける。このとき、ブリッジはIDではなく位置で対応付ける(`traffic_light.map_path`、既定で有効)。
 - 終了コード2は、追加されなかった信号があったという意味。理由を1つずつ確かめる。
